@@ -173,7 +173,7 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgb(0 0 0/.1)}
 .search{flex:1;min-width:160px;max-width:280px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
 .tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
-table{border-collapse:collapse;width:100%;min-width:880px;font-size:14px}
+table{border-collapse:collapse;width:100%;min-width:980px;font-size:14px}
 th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
 tbody tr{cursor:pointer}
@@ -299,7 +299,7 @@ td .s{font-size:12px;color:var(--muted)}
       <button class="btn small" id="btn-csv" hidden>CSV exportieren</button>
     </div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Wohnung</th><th>Firma</th><th class="r">Pers.</th><th>Zeitraum</th><th class="r">Preis</th><th>Abgerechnet bis</th><th class="r">Offen</th><th>Status</th></tr></thead>
+      <thead><tr><th>Wohnung</th><th>Firma</th><th class="r">Pers.</th><th>Zeitraum</th><th class="r">Preis</th><th class="r">€ / Pers. / Nacht</th><th>Abgerechnet bis</th><th class="r">Offen</th><th>Status</th></tr></thead>
       <tbody id="ls-body"></tbody>
     </table></div>
   </section>
@@ -351,6 +351,7 @@ const FAR='9999-12-31';
 const endOf=b=>b.extendedUntil||b.endOriginal||FAR;
 const perNight=b=>{const p=+b.price||0,n=+b.persons||0;switch(b.priceModel){case'pp_night':return p*n;case'unit_night':return p;case'pp_month':return p*n/30;case'unit_month':return p/30;default:return 0}};
 function phase(b){const e=endOf(b);if(b.start>TODAY)return'future';if(e<=TODAY)return'past';return'now'}
+const perPersonNight=b=>{const n=+b.persons||0;return n?perNight(b)/n:0};
 function billing(b){
   const end=endOf(b);
   const billedEnd=b.invoicedUntil?minD(addDays(b.invoicedUntil,1),end):b.start;
@@ -546,7 +547,7 @@ function renderList(){
   if(q)list=list.filter(b=>(b.company||'').toLowerCase().includes(q)||unitName(b.unitId).toLowerCase().includes(q)||(b.contact||'').toLowerCase().includes(q));
   list.sort((a,c)=>lsFilter==='past'?(endOf(a)<endOf(c)?1:-1):(a.start<c.start?-1:1));
   const body=$('#ls-body');
-  if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'8',class:'empty',text:bookings.length?'Keine Buchungen für diesen Filter.':(canWrite?'Noch keine Buchungen. Lege die erste über „+ Buchung“ an.':'Noch keine Buchungen eingetragen.')})));return}
+  if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'9',class:'empty',text:bookings.length?'Keine Buchungen für diesen Filter.':(canWrite?'Noch keine Buchungen. Lege die erste über „+ Buchung“ an.':'Noch keine Buchungen eingetragen.')})));return}
   body.replaceChildren(...list.map(b=>{
     const bl=billing(b),ph=phase(b);
     const status=b.state==='reserved'?el('span',{class:'pill neutral',text:'reserviert'}):ph==='future'?el('span',{class:'pill info',text:'kommend'}):ph==='now'?el('span',{class:'pill ok',text:'läuft'}):el('span',{class:'pill neutral',text:'beendet'});
@@ -557,6 +558,7 @@ function renderList(){
       el('td',{class:'r num',text:String(b.persons||0)}),
       el('td',{},el('div',{class:'num',text:fmt(b.start)+' – '+(endOf(b)===FAR?'offen':fmt(endOf(b)))}),ext),
       el('td',{class:'r'},el('div',{class:'num',text:b.price?eur2(+b.price):'—'}),el('div',{class:'s',text:PRICE_SHORT[b.priceModel]||''})),
+      el('td',{class:'r num',text:perPersonNight(b)?eur2(perPersonNight(b)):'—'}),
       el('td',{class:'num'},bl.full?el('span',{class:'pill ok',text:'komplett'}):document.createTextNode(fmt(b.invoicedUntil))),
       el('td',{class:'r'},bl.days?el('div',{},el('div',{class:'num',text:eur(bl.amount)}),el('div',{class:'s',text:bl.days+' Nächte'})):el('span',{class:'s',text:'—'})),
       el('td',{},status));
@@ -608,7 +610,8 @@ async function drawDrawer(){
     const others=bookings.filter(b=>b.id!==editing.id);
     const ob=overbooked([...others,{...d,id:'_draft'}])[d.unitId];
     const rows=[
-      ['Pro Nacht',pn?eur2(pn):'—'],
+      ['Pro Nacht (Wohnung)',pn?eur2(pn):'—'],
+      ['Pro Person / Nacht',pn&&+d.persons?eur2(pn/(+d.persons)):'—'],
       ['Pro Monat (30 Nächte)',pn?eur(pn*30):'—'],
       ['Gesamtwert',tv!=null&&pn?eur(tv):(e===FAR?'Ende offen':'—')],
       ['Noch nicht abgerechnet',bl.days?bl.days+' Nächte · '+eur(bl.amount):'nichts offen'],
@@ -820,6 +823,12 @@ function bookingCandidates(unitId,company,pStart,pEnd){
     return{b,score};
   }).sort((a,c)=>c.score-a.score||(a.b.start<c.b.start?1:-1));
 }
+function invoiceNightly(p){
+  const nights=p.periodStart&&p.periodEnd?diff(p.periodStart,p.periodEnd)+1:0;
+  if(!nights)return null;
+  const net=p.net!=null?p.net:(p.quantity!=null&&p.unitPrice!=null?p.quantity*p.unitPrice:null);
+  return net!=null?Math.round(net/nights*100)/100:null;
+}
 function priceFromInvoice(p,unitId){
   const nights=p.periodStart&&p.periodEnd?diff(p.periodStart,p.periodEnd)+1:0;
   const q=p.quantity,cap=UNIT[unitId]?.cap||0;
@@ -917,7 +926,12 @@ function drawInvoiceReview(file,p){
         lines.push(el('label',{class:'check',for:'iv-ext'},cb,el('span',{text:'Aufenthalt bis '+fmt(addDays(p.periodEnd,1))+' verlängern (Rechnung geht über die bisherige Abreise '+fmt(endOf(b))+' hinaus)'})));
       }
       if(b.price===''||b.price==null)lines.push(el('div',{class:'hint',text:'Preis wird aus der Rechnung übernommen: '+eur2(st.price)+' '+PRICE_SHORT[st.priceModel]}));
-      else if(Math.abs(+b.price-(+st.price))>0.01&&b.priceModel===st.priceModel)lines.push(el('div',{class:'warnbox',text:'Achtung: In der Buchung steht '+eur2(+b.price)+', auf der Rechnung '+eur2(+st.price)+'. Der Preis in der Buchung bleibt unverändert.'}));
+      else{
+        const invNight=invoiceNightly(p), bNight=perNight(b);
+        const pp=v=>+b.persons?' ('+eur2(v/(+b.persons))+' pro Person bei '+b.persons+' Pers.)':'';
+        if(invNight!=null&&Math.abs(invNight-bNight)>0.01)lines.push(el('div',{class:'warnbox',text:'Achtung: Laut Buchung '+eur2(bNight)+' pro Nacht'+pp(bNight)+', laut Rechnung '+eur2(invNight)+' pro Nacht'+pp(invNight)+'. Der Preis in der Buchung bleibt unverändert.'}));
+        else if(invNight!=null)lines.push(el('div',{class:'hint',text:'Preis passt: '+eur2(invNight)+' pro Nacht'+pp(invNight)+'.'}));
+      }
       detail.append(...lines);
     }
   }
