@@ -361,6 +361,29 @@ function billing(b){
 }
 function totalValue(b){const e=endOf(b);if(e===FAR)return null;return diff(b.start,e)*perNight(b)}
 function nightsIn(b,from,to){const s=maxD(b.start,from),e=minD(endOf(b),to);return Math.max(0,diff(s,e))}
+// Umsatz eines Zeitraums [from,to): echte Rechnungsbeträge anteilig nach Leistungszeitraum,
+// geschätzt (Preis × Nächte) nur für Nächte, die noch keine Rechnung abdeckt.
+function monthRevenue(from,to){
+  let net=0,gross=0,est=0;
+  const covered={}; // booking_id -> abgedeckte Nächte im Zeitraum
+  for(const i of invoices){
+    if(!i.period_start||!i.period_end)continue;
+    const nights=diff(i.period_start,i.period_end)+1;
+    const ov=Math.max(0,diff(maxD(i.period_start,from),minD(addDays(i.period_end,1),to)));
+    if(!ov||nights<=0)continue;
+    const share=ov/nights;
+    const n=i.net!=null?+i.net:(i.total!=null&&i.vat!=null?+i.total-+i.vat:null);
+    if(n!=null)net+=n*share;
+    if(i.total!=null)gross+=+i.total*share;
+    if(i.booking_id)covered[i.booking_id]=(covered[i.booking_id]||0)+ov;
+  }
+  for(const b of bookings){
+    if(b.state==='reserved')continue;
+    const open=Math.max(0,nightsIn(b,from,to)-(covered[b.id]||0));
+    est+=open*perNight(b);
+  }
+  return{net:Math.round(net*100)/100,gross:Math.round(gross*100)/100,est:Math.round(est*100)/100};
+}
 function overbooked(list){
   // pro Wohnung: höchste gleichzeitige Belegung und erstes Datum der Überbelegung
   const res={};
@@ -419,7 +442,7 @@ function renderKpis(){
   const open=bookings.reduce((s,b)=>s+billing(b).amount,0);
   const openN=bookings.filter(b=>billing(b).days>0).length;
   const mFrom=TODAY.slice(0,7)+'-01', mTo=addMonths(mFrom,1);
-  const month=bookings.reduce((s,b)=>s+nightsIn(b,mFrom,mTo)*perNight(b),0);
+  const rev=monthRevenue(mFrom,mTo);
   const pct=Math.round(beds/TOTAL_BEDS*100);
   const k=(lbl,val,sub,meter)=>el('div',{class:'kpi'},el('div',{class:'lbl',text:lbl}),val,el('div',{class:'sub',text:sub}),meter||null);
   const v=(a,b)=>{const d=el('div',{class:'val'});d.append(a);if(b)d.append(el('small',{text:' '+b}));return d};
@@ -427,7 +450,11 @@ function renderKpis(){
     k('Betten belegt heute',v(String(beds),'/ '+TOTAL_BEDS),pct+' % Auslastung',el('div',{class:'meter'},el('i',{style:'width:'+Math.min(100,pct)+'%'}))),
     k('Wohnungen belegt',v(String(units),'/ '+UNITS.length),(UNITS.length-units)+' komplett frei'),
     k('Noch nicht abgerechnet',v(eur(open)),openN?openN+' Buchung'+(openN>1?'en':'')+' mit offenen Nächten':'alles abgerechnet'),
-    k('Umsatz '+new Date(toT(mFrom)).toLocaleDateString('de-DE',{month:'long',timeZone:'UTC'}),v(eur(month)),'Schätzung aus Preis × Nächten'),
+    k('Umsatz '+new Date(toT(mFrom)).toLocaleDateString('de-DE',{month:'long',timeZone:'UTC'})+' (netto)',v(eur(rev.net+rev.est)),
+      !rev.est&&!rev.net?'noch keine Buchungen':
+      !rev.est?'komplett aus Rechnungen · brutto '+eur(rev.gross):
+      !rev.net?'geschätzt, noch keine Rechnung für diesen Monat':
+      eur(rev.net)+' aus Rechnungen · '+eur(rev.est)+' geschätzt'),
   );
 }
 
