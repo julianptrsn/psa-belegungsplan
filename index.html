@@ -204,6 +204,20 @@ td .s{font-size:12px;color:var(--muted)}
 .quick{display:flex;flex-wrap:wrap;gap:6px}
 .meta{font-size:12px;color:var(--faint)}
 .confirm{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:10px 12px;font-size:13px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.dropzone{position:fixed;inset:0;z-index:25;background:color-mix(in srgb,var(--accent) 18%,transparent);display:grid;place-items:center;pointer-events:none}
+.dropzone div{background:var(--surface);border:2px dashed var(--accent);border-radius:14px;padding:28px 36px;font-weight:700;font-size:17px;color:var(--accent)}
+.invsum{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.invsum .h{display:flex;justify-content:space-between;gap:10px;align-items:baseline;background:var(--sunk);padding:9px 12px;font-weight:700}
+.invsum dl{margin:0;padding:8px 12px;display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px}
+.invsum dt{color:var(--muted)}
+.invsum dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:14px}
+.check input{margin-top:3px}
+.warnbox{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 12px;font-size:13px;font-weight:600}
+.invlist{display:grid;gap:6px}
+.invlist a,.invlist span.row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 10px;border:1px solid var(--line-soft);border-radius:8px;color:var(--fg);text-decoration:none;background:var(--bg)}
+.invlist a:hover{border-color:var(--accent)}
+.invlist b{font-family:var(--font-num);font-weight:500}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,calc(env(safe-area-inset-bottom,0px) + 12px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:30}
 .ro-note{font-size:13px;color:var(--muted)}
 @media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
@@ -236,6 +250,8 @@ td .s{font-size:12px;color:var(--muted)}
       <button role="tab" id="tab-tl" data-view="tl" aria-selected="false">Belegungsplan</button>
       <button role="tab" id="tab-ls" data-view="ls" aria-selected="false">Buchungen</button>
     </div>
+    <button class="btn" id="btn-inv" hidden title="Eine oder mehrere Rechnungen als PDF hochladen">Rechnung hochladen</button>
+    <input type="file" id="inv-file" accept="application/pdf,.pdf" multiple hidden>
     <button class="btn primary" id="btn-new" hidden>+ Buchung</button>
     <div class="userbox"><span id="user-name"></span><button class="btn small" id="btn-logout">Abmelden</button></div>
   </div>
@@ -380,6 +396,7 @@ function render(){
   document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.view===view));
   ['ov','tl','ls'].forEach(v=>$('#view-'+v).hidden=v!==view);
   $('#btn-new').hidden=!canWrite;
+  $('#btn-inv').hidden=!canWrite;
   $('#btn-csv').hidden=!downloads;
   renderKpis();renderStatus();
   if(view==='ov')renderOverview();
@@ -573,6 +590,7 @@ async function drawDrawer(){
       ob&&ob.ids.includes('_draft')?el('div',{style:'color:var(--bad);font-weight:600'},el('span',{text:'Überbelegung ab '+fmt(ob.from)+': '+ob.peak+' Pers. bei '+UNIT[d.unitId].cap+' Betten'})):null);
   }
   const confirmBox=el('div');
+  const invBox=el('div');
   const metaLine=el('div',{class:'meta'});
   const footer=el('footer',{});
   if(ro){footer.append(el('span',{class:'ro-note grow',text:'Lesemodus'}),el('button',{class:'btn',onclick:closeDrawer},'Schließen'))}
@@ -595,11 +613,12 @@ async function drawDrawer(){
       f('f-inv','Rechnung geschrieben bis (einschließlich)',invInput,quick),
       calc,
       f('f-notes','Notizen',notes),
-      confirmBox,metaLine),
+      invBox,confirmBox,metaLine),
     footer);
   $('#drawer-root').replaceChildren(el('div',{class:'scrim',onclick:closeDrawer}),drawer);
   updateCalc();
   if(!ro)setTimeout(()=>(isNew?$('#f-company'):null)?.focus(),50);
+  if(!isNew)fillInvoiceList(invBox,editing.id);
   if(!isNew&&d.updatedAt){
     const who=d.updatedBy?(memberNames[d.updatedBy]||''):'';
     metaLine.textContent='Zuletzt geändert'+(who?' von '+who:'')+' am '+new Date(d.updatedAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'});
@@ -662,6 +681,281 @@ document.querySelectorAll('#ls-seg button').forEach(b=>b.addEventListener('click
 $('#ls-q').addEventListener('input',e=>{lsQuery=e.target.value;renderList()});
 $('#btn-csv').addEventListener('click',exportCsv);
 
+/* ===== Rechnungs-Parser (PSA-Rechnungsvorlage) ===== */
+// items: [{str,x,y}] aus pdf.js (y wächst nach oben), width: Seitenbreite
+function invoiceLines(items){
+  const rows=[];
+  items.filter(i=>i.str&&i.str.trim()).sort((a,b)=>b.y-a.y||a.x-b.x).forEach(i=>{
+    let r=rows.find(r=>Math.abs(r.y-i.y)<3);
+    if(!r){r={y:i.y,parts:[]};rows.push(r)}
+    r.parts.push(i);
+  });
+  rows.forEach(r=>{
+    r.parts.sort((a,b)=>a.x-b.x);
+    // Teile mit großem Abstand als eigene Zellen trennen
+    const cells=[];let cur=null;
+    r.parts.forEach(p=>{
+      if(cur&&p.x-cur.end<12){cur.text+=(p.x-cur.end>1.5?' ':'')+p.str;cur.end=p.x+p.w}
+      else{cur={x:p.x,end:p.x+p.w,text:p.str};cells.push(cur)}
+    });
+    r.cells=cells.map(c=>({x:c.x,text:c.text.replace(/\s+/g,' ').trim()})).filter(c=>c.text);
+    r.text=r.cells.map(c=>c.text).join('  ');
+  });
+  return rows.sort((a,b)=>b.y-a.y);
+}
+const deNum=s=>{if(s==null)return null;const m=String(s).replace(/[€\s]/g,'').match(/-?[\d.]*\d(?:,\d+)?/);if(!m)return null;return parseFloat(m[0].replace(/\./g,'').replace(',','.'))};
+const deDate=s=>{const m=String(s||'').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);return m?m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'):''};
+
+function parseInvoice(items,width){
+  const rows=invoiceLines(items);
+  const all=rows.map(r=>r.text).join('\n');
+  const out={raw:all,number:'',date:'',due:'',customer:'',customerAddr:[],periodStart:'',periodEnd:'',location:'',quantity:null,unitPrice:null,vatRate:null,net:null,vat:null,total:null,description:''};
+  const val=label=>{for(const r of rows){const i=r.cells.findIndex(c=>c.text.replace(/:$/,'').toLowerCase()===label.toLowerCase());if(i>=0&&r.cells[i+1])return r.cells[i+1].text}
+    const m=all.match(new RegExp(label+':?\\s+(\\S[^\\n]*)','i'));return m?m[1].split(/\s{2,}/)[0]:''};
+  out.number=val('Rechnungsnummer');
+  out.date=deDate(val('Rechnungsdatum'));
+  out.due=deDate(val('Fälligkeitsdatum'));
+  // Kunde: linke Spalte zwischen Absenderzeile und Überschrift "Rechnung"
+  const iHead=rows.findIndex(r=>/^Rechnung$/i.test(r.text.trim()));
+  const iSender=rows.findIndex(r=>/Gewerbedamm/.test(r.text));
+  const leftMax=width*0.45;
+  const left=[];
+  rows.forEach((r,i)=>{if(i<=iSender||(iHead>=0&&i>=iHead))return;const c=r.cells.filter(c=>c.x<leftMax).map(c=>c.text).join(' ');if(c)left.push(c)});
+  out.customer=left[0]||'';out.customerAddr=left.slice(1);
+  // Zeitraum und Objekt direkt unter "Rechnung"
+  const after=iHead>=0?rows.slice(iHead+1,iHead+5).map(r=>r.text):rows.map(r=>r.text);
+  for(let k=0;k<after.length;k++){
+    const m=after[k].match(/(\d{1,2}\.\d{1,2}\.\d{4})\s*[-–]\s*(\d{1,2}\.\d{1,2}\.\d{4})/);
+    if(m){out.periodStart=deDate(m[1]);out.periodEnd=deDate(m[2]);
+      const loc=after[k].replace(m[0],'').trim()||after[k+1]||'';
+      if(!/^Nr\.?\s/i.test(loc))out.location=loc.trim();break}
+  }
+  // Positionszeile: "1  Übernachtungen  30,00  102,00 €  7,00 %  3.274,20 €"
+  const pos=rows.find(r=>/^\d+$/.test(r.cells[0]?.text||'')&&r.cells.length>=5&&/€/.test(r.text));
+  if(pos){const c=pos.cells.map(c=>c.text);
+    out.description=c[1]||'';out.quantity=deNum(c[2]);out.unitPrice=deNum(c[3]);
+    const vr=c.find(t=>/%/.test(t));out.vatRate=vr?deNum(vr):null;}
+  const iPos=pos?rows.indexOf(pos):0;
+  const sum=re=>{const r=rows.slice(iPos+1).find(r=>re.test(r.cells.find(c=>c.x>width*0.45)?.text||''));return r&&/€/.test(r.text)?deNum(r.cells[r.cells.length-1].text):null};
+  out.net=sum(/^Nettobetrag/i);out.vat=sum(/^USt\.?\s*\d/i);out.total=sum(/^Gesamtsumme/i);
+  return out;
+}
+
+/* ===== Rechnungen: PDF lesen ===== */
+let invoices=[], invoicesReady=false;
+const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let pdfjsReady=null;
+function loadPdfJs(){
+  if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);
+  if(pdfjsReady)return pdfjsReady;
+  pdfjsReady=new Promise((res,rej)=>{const s=document.createElement('script');s.src=PDFJS+'pdf.min.js';
+    s.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+'pdf.worker.min.js';res(window.pdfjsLib)};
+    s.onerror=()=>{pdfjsReady=null;rej(new Error('PDF-Leser konnte nicht geladen werden'))};document.head.append(s)});
+  return pdfjsReady;
+}
+async function readInvoicePdf(file){
+  const lib=await loadPdfJs();
+  const doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  const page=await doc.getPage(1);const vp=page.getViewport({scale:1});
+  const tc=await page.getTextContent();
+  const items=tc.items.map(i=>({str:i.str,x:i.transform[4],y:i.transform[5],w:i.width}));
+  return parseInvoice(items,vp.width);
+}
+
+/* ===== Rechnungen: Zuordnung ===== */
+const normAddr=s=>String(s||'').toLowerCase().replace(/ß/g,'ss').replace(/str\.(?=\s|\d|$)/g,'strasse').replace(/[^a-z0-9äöü]/g,'');
+const floorKey=s=>String(s||'').toLowerCase().replace(/dachgeschoss/g,'dg').replace(/erdgeschoss/g,'eg').replace(/obergeschoss/g,'og').replace(/untergeschoss/g,'ug').replace(/[^a-z0-9]/g,'');
+function matchUnit(location){
+  if(!location)return null;
+  const m=location.match(/^(.*?)(?:\(([^)]*)\))?\s*$/);
+  const addrPart=normAddr(m[1]),floorPart=floorKey(m[2]||'');
+  const bld=BUILDINGS.find(b=>{const n=normAddr(b.name);return addrPart.startsWith(n)||n.startsWith(addrPart)&&addrPart.length>6});
+  if(!bld)return null;
+  const rest=floorPart||floorKey(m[1].slice(bld.name.length));
+  if(bld.units.length===1&&!rest)return bld.units[0][0];
+  if(!rest)return null;
+  const cand=bld.units.filter(([id,label])=>{const k=floorKey(label);const k2=k.replace('rechts','r').replace('links','l');return k===rest||k2===rest||(rest.length>=2&&(k.startsWith(rest)||rest.startsWith(k)))});
+  return cand.length===1?cand[0][0]:(bld.units.length===1?bld.units[0][0]:null);
+}
+const normCo=s=>String(s||'').toLowerCase().replace(/\b(gmbh|co|kg|ag|ug|mbh|e\.?k|ohg|gbr|haftungsbeschränkt)\b/g,'').replace(/[^a-z0-9äöüß]/g,'');
+const sameCo=(a,b)=>{const x=normCo(a),y=normCo(b);return !!x&&!!y&&(x===y||x.includes(y)||y.includes(x))};
+function bookingCandidates(unitId,company,pStart,pEnd){
+  return bookings.filter(b=>b.unitId===unitId).map(b=>{
+    let score=0;if(sameCo(b.company,company))score+=2;
+    if(b.start<=pEnd&&endOf(b)>pStart)score+=2; else if(endOf(b)!==FAR&&diff(endOf(b),pStart)>=0&&diff(endOf(b),pStart)<=3)score+=1;
+    return{b,score};
+  }).sort((a,c)=>c.score-a.score||(a.b.start<c.b.start?1:-1));
+}
+function priceFromInvoice(p,unitId){
+  const nights=p.periodStart&&p.periodEnd?diff(p.periodStart,p.periodEnd)+1:0;
+  const q=p.quantity,cap=UNIT[unitId]?.cap||0;
+  if(nights&&q&&Math.abs(q-nights)<0.01)return{priceModel:'unit_night',price:p.unitPrice,persons:''};
+  if(nights&&q&&q%nights===0&&q/nights>=2&&(!cap||q/nights<=cap))return{priceModel:'pp_night',price:p.unitPrice,persons:q/nights};
+  if(q===1)return{priceModel:'unit_month',price:p.unitPrice,persons:''};
+  return{priceModel:'unit_night',price:p.unitPrice,persons:''};
+}
+
+/* ===== Rechnungen: Upload-Warteschlange & Prüfansicht ===== */
+let invQueue=[],invPos=0;
+async function startInvoiceImport(files){
+  files=[...files].filter(f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name));
+  if(!files.length){toast('Bitte PDF-Dateien wählen.');return}
+  if(!invoicesReady){toast('Rechnungsablage ist noch nicht eingerichtet (SQL fehlt).');return}
+  invQueue=files;invPos=0;nextInvoice();
+}
+async function nextInvoice(){
+  if(invPos>=invQueue.length){closeDrawer();invQueue=[];return}
+  const file=invQueue[invPos];
+  $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer'},el('div',{class:'body'},el('p',{class:'ro-note',text:'Lese '+file.name+' …'}))));
+  let p;
+  try{p=await readInvoicePdf(file)}catch(e){p=null}
+  editing={id:null,invoice:true};
+  drawInvoiceReview(file,p);
+}
+function drawInvoiceReview(file,p){
+  const total=invQueue.length, n=invPos+1;
+  const ok=p&&p.number&&p.periodStart;
+  const unitId=ok?matchUnit(p.location):null;
+  const pr=ok?priceFromInvoice(p,unitId):{};
+  const st={unitId:unitId||'',company:ok?p.customer:'',target:'',persons:pr.persons??'',price:pr.price??'',priceModel:pr.priceModel||'unit_night',extend:true,start:ok?p.periodStart:''};
+  const dup=ok?invoices.find(i=>i.number===p.number):null;
+  const f=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
+  const next=()=>{invPos++;nextInvoice()};
+
+  const head=el('header',{},el('h2',{id:'d-title',text:'Rechnung'+(ok?' '+p.number:'')+(total>1?' · '+n+' von '+total:'')}),el('button',{class:'btn small',onclick:()=>{invQueue=[];closeDrawer()},'aria-label':'Schließen'},'✕'));
+  if(!ok){
+    $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer',role:'dialog','aria-modal':'true'},head,
+      el('div',{class:'body'},el('div',{class:'warnbox',text:'Aus „'+file.name+'“ konnten keine Rechnungsdaten gelesen werden. Ist es eine Rechnung aus eurer Vorlage (kein Scan)?'})),
+      el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn primary',onclick:next},total>n?'Nächste Rechnung':'Schließen'))));
+    return;
+  }
+  const summary=el('div',{class:'invsum'},el('div',{class:'h'},el('span',{text:p.customer||'Kunde unbekannt'}),el('span',{class:'num',text:p.total!=null?eur2(p.total):''})),
+    el('dl',{},
+      el('dt',{text:'Rechnungsdatum'}),el('dd',{class:'num',text:fmt(p.date)}),
+      el('dt',{text:'Zeitraum'}),el('dd',{class:'num',text:fmt(p.periodStart)+' – '+fmt(p.periodEnd)}),
+      el('dt',{text:'Objekt'}),el('dd',{text:p.location||'—'}),
+      el('dt',{text:'Position'}),el('dd',{class:'num',text:(p.quantity!=null?String(p.quantity).replace('.',','):'?')+' × '+(p.unitPrice!=null?eur2(p.unitPrice):'?')+' netto'+(p.description?' ('+p.description+')':'')}),
+      el('dt',{text:'Netto / USt.'}),el('dd',{class:'num',text:(p.net!=null?eur2(p.net):'—')+' / '+(p.vat!=null?eur2(p.vat):'—')+(p.vatRate!=null?' ('+p.vatRate+' %)':'')})));
+
+  const unitSel=el('select',{id:'iv-unit'},el('option',{value:'',text:'Bitte wählen …'}),BUILDINGS.map(bld=>el('optgroup',{label:bld.name},bld.units.map(([uid,label,cap])=>el('option',{value:uid,text:label+' ('+cap+' Betten)'})))));
+  unitSel.value=st.unitId;
+  const unitHint=el('div',{class:'hint'+(st.unitId?'':' bad'),text:st.unitId?'Erkannt aus „'+p.location+'“':'„'+(p.location||'?')+'“ konnte keiner Wohnung zugeordnet werden.'});
+  const coInp=el('input',{id:'iv-co',type:'text',list:'companies',value:st.company,autocomplete:'off'});
+  const targetSel=el('select',{id:'iv-target'});
+  const detail=el('div',{style:'display:grid;gap:14px'});
+  const saveBtn=el('button',{class:'btn primary'},'Übernehmen');
+
+  function rebuildTargets(keep){
+    const cands=st.unitId?bookingCandidates(st.unitId,st.company,p.periodStart,p.periodEnd):[];
+    targetSel.replaceChildren(...cands.map(({b})=>el('option',{value:b.id,text:(b.company||'Ohne Firma')+' · '+fmt(b.start)+' – '+(endOf(b)===FAR?'offen':fmt(endOf(b)))})),el('option',{value:'new',text:'Neue Buchung anlegen'}));
+    if(keep&&[...targetSel.options].some(o=>o.value===st.target))targetSel.value=st.target;
+    else targetSel.value=cands.length&&cands[0].score>=3?cands[0].b.id:'new';
+    st.target=targetSel.value;rebuildDetail();
+  }
+  function rebuildDetail(){
+    detail.replaceChildren();
+    if(st.target==='new'){
+      const pers=el('input',{id:'iv-pers',type:'number',min:'1',step:'1',inputmode:'numeric',value:st.persons});pers.addEventListener('input',()=>st.persons=pers.value===''?'':+pers.value);
+      const start=el('input',{id:'iv-start',type:'date',value:st.start});start.addEventListener('input',()=>st.start=start.value);
+      const price=el('input',{id:'iv-price',type:'number',min:'0',step:'0.5',value:st.price});price.addEventListener('input',()=>st.price=price.value===''?'':+price.value);
+      const model=el('select',{id:'iv-model'},Object.entries(PRICE_MODELS).map(([k,v])=>el('option',{value:k,text:v})));model.value=st.priceModel;model.addEventListener('change',()=>st.priceModel=model.value);
+      detail.append(
+        el('div',{class:'two'},f('iv-pers','Personen',pers,el('div',{class:'hint',text:st.unitId?UNIT[st.unitId].cap+' Betten':''})),f('iv-start','Anreise',start)),
+        el('div',{class:'two'},f('iv-price','Preis (netto)',price),f('iv-model','Preis gilt',model)),
+        el('div',{class:'hint',text:'Abreise bleibt offen. „Abgerechnet bis“ wird auf '+fmt(p.periodEnd)+' gesetzt.'}));
+    }else{
+      const b=bookings.find(x=>x.id===st.target);if(!b)return;
+      const newInv=b.invoicedUntil&&b.invoicedUntil>p.periodEnd?b.invoicedUntil:p.periodEnd;
+      const lines=[el('div',{class:'hint',text:'„Abgerechnet bis“: '+fmt(b.invoicedUntil)+' → '+fmt(newInv)})];
+      if(endOf(b)!==FAR&&p.periodEnd>=endOf(b)){
+        const cb=el('input',{type:'checkbox',id:'iv-ext'});cb.checked=st.extend;cb.addEventListener('change',()=>st.extend=cb.checked);
+        lines.push(el('label',{class:'check',for:'iv-ext'},cb,el('span',{text:'Aufenthalt bis '+fmt(addDays(p.periodEnd,1))+' verlängern (Rechnung geht über die bisherige Abreise '+fmt(endOf(b))+' hinaus)'})));
+      }
+      if(b.price===''||b.price==null)lines.push(el('div',{class:'hint',text:'Preis wird aus der Rechnung übernommen: '+eur2(st.price)+' '+PRICE_SHORT[st.priceModel]}));
+      else if(Math.abs(+b.price-(+st.price))>0.01&&b.priceModel===st.priceModel)lines.push(el('div',{class:'warnbox',text:'Achtung: In der Buchung steht '+eur2(+b.price)+', auf der Rechnung '+eur2(+st.price)+'. Der Preis in der Buchung bleibt unverändert.'}));
+      detail.append(...lines);
+    }
+  }
+  unitSel.addEventListener('change',()=>{st.unitId=unitSel.value;unitHint.className='hint';unitHint.textContent='Manuell gewählt';rebuildTargets(false)});
+  coInp.addEventListener('input',()=>{st.company=coInp.value;rebuildTargets(true)});
+  targetSel.addEventListener('change',()=>{st.target=targetSel.value;rebuildDetail()});
+  rebuildTargets(false);
+
+  saveBtn.addEventListener('click',async()=>{
+    if(!st.unitId){toast('Bitte eine Wohnung wählen.');return}
+    if(!st.company.trim()){toast('Bitte die Firma eintragen.');return}
+    if(st.target==='new'&&!(+st.persons>0)){toast('Bitte die Anzahl Personen eintragen.');return}
+    saveBtn.disabled=true;
+    try{await saveInvoice(file,p,st);toast('Rechnung '+p.number+' übernommen');next()}
+    catch(e){saveBtn.disabled=false;toast(e.message||'Übernehmen hat nicht geklappt.')}
+  });
+
+  const body=el('div',{class:'body'},summary,
+    dup?el('div',{class:'warnbox',text:'Rechnung '+p.number+' ist schon erfasst'+(dup.booking_id&&bookings.find(b=>b.id===dup.booking_id)?' (bei '+(bookings.find(b=>b.id===dup.booking_id).company)+')':'')+'.'}):null,
+    f('iv-unit','Wohnung',unitSel,unitHint),
+    f('iv-co','Firma',coInp),
+    f('iv-target','Zuordnen zu',targetSel),
+    detail);
+  const footer=el('footer',{},el('button',{class:'btn',onclick:next},'Überspringen'),el('span',{class:'grow'}),dup?null:saveBtn);
+  $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer',role:'dialog','aria-modal':'true','aria-labelledby':'d-title'},head,body,footer));
+}
+
+async function saveInvoice(file,p,st){
+  let bookingId=st.target;
+  if(st.target==='new'){
+    const row=toRow({unitId:st.unitId,company:st.company,contact:'',persons:st.persons,start:st.start||p.periodStart,endOriginal:'',extendedUntil:'',price:st.price,priceModel:st.priceModel,invoicedUntil:p.periodEnd,state:'confirmed',notes:''});
+    const {data,error}=await sb.from('bookings').insert(row).select('id');
+    if(error||!data?.length)throw new Error(error?.code==='42501'||!data?.length?'Du hast nur Leserechte.':'Buchung konnte nicht angelegt werden: '+error.message);
+    bookingId=data[0].id;
+  }else{
+    const b=bookings.find(x=>x.id===bookingId);
+    const upd={invoiced_until:b.invoicedUntil&&b.invoicedUntil>p.periodEnd?b.invoicedUntil:p.periodEnd};
+    if(st.extend&&endOf(b)!==FAR&&p.periodEnd>=endOf(b))upd.extended_until=addDays(p.periodEnd,1);
+    if(b.price===''||b.price==null){upd.price=st.price===''?null:+st.price;upd.price_model=st.priceModel}
+    const {error}=await sb.from('bookings').update(upd).eq('id',bookingId);
+    if(error)throw new Error('Buchung konnte nicht aktualisiert werden: '+error.message);
+  }
+  // PDF ablegen
+  const safe=String(p.number).replace(/[^A-Za-z0-9._-]/g,'_');
+  const path=(p.date||TODAY).slice(0,4)+'/'+safe+'.pdf';
+  let filePath=path;
+  const up=await sb.storage.from('rechnungen').upload(path,file,{contentType:'application/pdf',upsert:false});
+  if(up.error){
+    const alt=(p.date||TODAY).slice(0,4)+'/'+safe+'-'+Date.now()+'.pdf';
+    const up2=await sb.storage.from('rechnungen').upload(alt,file,{contentType:'application/pdf'});
+    filePath=up2.error?null:alt;
+  }
+  const {error}=await sb.from('invoices').insert({number:p.number,invoice_date:p.date||null,due_date:p.due||null,customer:p.customer,unit_id:st.unitId,location_text:p.location,
+    period_start:p.periodStart,period_end:p.periodEnd,quantity:p.quantity,unit_price:p.unitPrice,vat_rate:p.vatRate,net:p.net,vat:p.vat,total:p.total,booking_id:bookingId,file_path:filePath});
+  if(error)throw new Error(error.code==='23505'?'Rechnung '+p.number+' ist schon erfasst.':'Rechnung konnte nicht gespeichert werden: '+error.message);
+  if(!filePath)toast('Daten übernommen, aber das PDF konnte nicht abgelegt werden.');
+  await loadBookings();
+}
+
+async function fillInvoiceList(box,bookingId){
+  const list=invoices.filter(i=>i.booking_id===bookingId).sort((a,c)=>(a.period_start<c.period_start?1:-1));
+  if(!list.length)return;
+  const paths=list.map(i=>i.file_path).filter(Boolean);
+  let urls={};
+  if(paths.length){const {data}=await sb.storage.from('rechnungen').createSignedUrls(paths,3600);(data||[]).forEach(d=>{if(d.signedUrl)urls[d.path]=d.signedUrl})}
+  box.replaceChildren(el('div',{class:'field'},el('label',{text:'Rechnungen ('+list.length+')'}),
+    el('div',{class:'invlist'},list.map(i=>{
+      const kids=[el('span',{text:'Nr. '+i.number+' · '+fmt(i.period_start)+' – '+fmt(i.period_end)}),el('b',{text:i.total!=null?eur2(+i.total):''})];
+      return urls[i.file_path]?el('a',{href:urls[i.file_path],target:'_blank',rel:'noopener',title:'PDF öffnen'},...kids):el('span',{class:'row'},...kids);
+    }))));
+}
+
+/* ===== Rechnungen: Knopf & Drag-and-drop ===== */
+$('#btn-inv').addEventListener('click',()=>$('#inv-file').click());
+$('#inv-file').addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';if(fs.length)startInvoiceImport(fs)});
+let dragDepth=0,dz=null;
+const hasFiles=e=>[...(e.dataTransfer?.types||[])].includes('Files');
+document.addEventListener('dragenter',e=>{if(!canWrite||!hasFiles(e))return;e.preventDefault();dragDepth++;if(!dz){dz=el('div',{class:'dropzone'},el('div',{text:'Rechnungen hier ablegen'}));document.body.append(dz)}});
+document.addEventListener('dragover',e=>{if(canWrite&&hasFiles(e))e.preventDefault()});
+document.addEventListener('dragleave',()=>{if(--dragDepth<=0&&dz){dz.remove();dz=null;dragDepth=0}});
+document.addEventListener('drop',e=>{if(!hasFiles(e))return;e.preventDefault();dragDepth=0;if(dz){dz.remove();dz=null}if(canWrite&&e.dataTransfer.files.length)startInvoiceImport(e.dataTransfer.files)});
+
+
 /* ===== Login & Start ===== */
 // Typ des Links aus der E-Mail merken, bevor Supabase die Adresse aufräumt
 const LINK_TYPE=(new URLSearchParams(location.hash.slice(1)).get('type'))||'';
@@ -705,8 +999,11 @@ $('#auth-form').addEventListener('submit',async e=>{
 $('#btn-logout').addEventListener('click',async()=>{await sb.auth.signOut()});
 
 async function loadBookings(){
-  const {data,error}=await sb.from('bookings').select('*').order('start_date');
+  const [{data,error},inv]=await Promise.all([
+    sb.from('bookings').select('*').order('start_date'),
+    sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,total,booking_id,file_path').order('invoice_date',{ascending:false})]);
   if(error){toast('Buchungen konnten nicht geladen werden.');return}
+  invoices=inv.error?[]:inv.data;invoicesReady=!inv.error;
   bookings=data.map(fromRow);loaded=true;render();
   if(editing&&editing.id&&!bookings.find(b=>b.id===editing.id)){closeDrawer();toast('Diese Buchung wurde gelöscht.')}
 }
@@ -725,7 +1022,11 @@ async function startApp(session){
   await loadBookings();
   if(channel)sb.removeChannel(channel);
   let t=null;
-  channel=sb.channel('bookings-live').on('postgres_changes',{event:'*',schema:'public',table:'bookings'},()=>{clearTimeout(t);t=setTimeout(loadBookings,300)}).subscribe();
+  const refresh=()=>{clearTimeout(t);t=setTimeout(loadBookings,300)};
+  channel=sb.channel('bookings-live')
+    .on('postgres_changes',{event:'*',schema:'public',table:'bookings'},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'invoices'},refresh)
+    .subscribe();
 }
 function stopApp(){
   started=null;bookings=[];loaded=false;isMember=false;canWrite=false;closeDrawer();
