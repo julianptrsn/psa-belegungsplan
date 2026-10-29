@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#1d5f6e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Belegung">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 34'%3E%3Crect width='34' height='34' rx='8' fill='%231d5f6e'/%3E%3Cpath d='M10 18 17 12l7 6M12 17v7h10v-7' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='15.5' y='19' width='3' height='3' rx='.6' fill='%23d7891c'/%3E%3C/svg%3E">
+<title>Belegungsplan MA-FL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Kopfzeile mit Kennzahlen, darunter drei Ansichten (Übersicht · Belegungsplan · Buchungen); Bearbeiten im Seitenpanel */
+:root{
+  --bg:#f3f5f5; --surface:#ffffff; --sunk:#e8eded; --line:#d5dddd; --line-soft:#e4eaea;
+  --fg:#13282d; --muted:#5b7076; --faint:#8a9ca0;
+  --accent:#1d5f6e; --accent-fg:#ffffff; --accent-soft:#d9eaed;
+  --bar:#2c7586; --bar-fg:#ffffff; --bar-res:#e3eef0;
+  --ok:#2f7a4c; --ok-soft:#dcefe2;
+  --warn:#b26b0b; --warn-soft:#f8e8cf;
+  --bad:#b4302a; --bad-soft:#f6dcda;
+  --weekend:#eef2f2; --today:#d7891c;
+  --font-ui:'Archivo',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-num:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1b1e; --surface:#16262a; --sunk:#1c2f34; --line:#2a4148; --line-soft:#213740;
+  --fg:#e3ecee; --muted:#9db1b6; --faint:#6e868c;
+  --accent:#6fb8c8; --accent-fg:#0d1a1d; --accent-soft:#1f3d45;
+  --bar:#3f8fa1; --bar-fg:#ffffff; --bar-res:#1f3a41;
+  --ok:#6cc48d; --ok-soft:#1d3a2a; --warn:#e7a54a; --warn-soft:#3b2e18; --bad:#ef7b74; --bad-soft:#42211f;
+  --weekend:#132327; --today:#e7a54a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1b1e; --surface:#16262a; --sunk:#1c2f34; --line:#2a4148; --line-soft:#213740;
+  --fg:#e3ecee; --muted:#9db1b6; --faint:#6e868c;
+  --accent:#6fb8c8; --accent-fg:#0d1a1d; --accent-soft:#1f3d45;
+  --bar:#3f8fa1; --bar-fg:#ffffff; --bar-res:#1f3a41;
+  --ok:#6cc48d; --ok-soft:#1d3a2a; --warn:#e7a54a; --warn-soft:#3b2e18; --bad:#ef7b74; --bad-soft:#42211f;
+  --weekend:#132327; --today:#e7a54a; color-scheme:dark}
+
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+body{margin:0;min-height:100vh;}
+/* Login */
+.auth{min-height:100vh;display:grid;place-items:center;padding:24px max(16px,env(safe-area-inset-left,0px))}
+.auth-card{width:min(380px,100%);background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 24px;display:grid;gap:16px}
+.auth-card h1{margin:0;font-size:22px;font-weight:750;font-stretch:112%}
+.auth-card p{margin:0;color:var(--muted);font-size:14px}
+.auth-card .btn{justify-content:center;padding:11px 14px}
+.auth-msg{font-size:14px;border-radius:8px;padding:9px 12px}
+.auth-msg.err{background:var(--bad-soft);color:var(--bad)}
+.auth-msg.ok{background:var(--ok-soft);color:var(--ok)}
+.linkbtn{border:0;background:none;color:var(--accent);font-weight:600;cursor:pointer;padding:0;font-size:14px;justify-self:start}
+.userbox{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Header */
+header.top{border-bottom:1px solid var(--line);background:var(--surface)}
+header.top .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding-block:14px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand svg{flex:none}
+.brand h1{margin:0;font-size:19px;font-weight:750;font-stretch:112%;letter-spacing:-.01em;text-wrap:balance}
+.brand small{display:block;font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.02em}
+.tabs{display:flex;gap:4px;background:var(--sunk);padding:3px;border-radius:999px;margin-left:auto}
+.tabs button{border:0;background:transparent;padding:6px 14px;border-radius:999px;font-weight:600;font-size:14px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgb(0 0 0/.12)}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:var(--r);font-weight:600;font-size:14px;cursor:pointer}
+.btn:hover{border-color:var(--faint)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.btn.small{padding:4px 10px;font-size:13px}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.bar:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* KPI strip */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:18px}
+.kpi{background:var(--surface);padding:14px 16px;min-width:0}
+.kpi .lbl{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kpi .val{font-family:var(--font-num);font-size:26px;font-weight:500;margin-top:4px;letter-spacing:-.02em}
+.kpi .val small{font-size:14px;color:var(--muted)}
+.kpi .sub{font-size:13px;color:var(--muted);margin-top:2px}
+.meter{height:5px;background:var(--sunk);border-radius:3px;margin-top:8px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--accent);border-radius:3px}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi .val{font-size:22px}}
+
+main{padding-bottom:48px}
+section.view{margin-top:22px}
+h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spacing:.01em}
+.notice{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;color:var(--muted);font-size:14px}
+.notice b{color:var(--fg)}
+
+/* Overview */
+.ov-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+@media (max-width:860px){.ov-grid{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:0}
+.panel header{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line-soft)}
+.panel header h2{margin:0}
+.panel header span{font-size:13px;color:var(--muted)}
+.rows{list-style:none;margin:0;padding:0}
+.rows li{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line-soft);cursor:pointer}
+.rows li:last-child{border-bottom:0}
+.rows li:hover{background:var(--sunk)}
+.rows .main{flex:1;min-width:0}
+.rows .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rows .s{font-size:13px;color:var(--muted)}
+.rows .r{text-align:right;flex:none}
+.empty{padding:16px;color:var(--muted);font-size:14px}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.info{background:var(--accent-soft);color:var(--accent)}
+.pill.neutral{background:var(--sunk);color:var(--muted)}
+.freelist{display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px}
+.chip{border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--bg);cursor:pointer}
+.chip b{font-family:var(--font-num);font-weight:500}
+
+/* Timeline */
+.tl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px}
+.tl-bar .month{font-size:18px;font-weight:700;font-stretch:110%;min-width:150px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin-left:auto}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:18px;height:10px;border-radius:3px}
+.tl-scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;-webkit-overflow-scrolling:touch}
+.tl{--day:30px;--lab:190px;position:relative;width:calc(var(--lab) + var(--days) * var(--day))}
+@media (max-width:600px){.tl{--day:26px;--lab:118px}}
+.tl-head,.tl-row{display:flex}
+.tl-head{position:sticky;top:0;z-index:3;background:var(--surface);border-bottom:1px solid var(--line)}
+.tl-lab{position:sticky;left:0;z-index:2;flex:none;width:var(--lab);background:var(--surface);border-right:1px solid var(--line);padding:6px 10px;min-width:0}
+.tl-head .tl-lab{font-size:12px;color:var(--muted);display:flex;align-items:flex-end}
+.tl-days{display:flex;flex:none}
+.tl-day{width:var(--day);flex:none;text-align:center;font-size:11px;color:var(--muted);padding:4px 0;line-height:1.2}
+.tl-day b{display:block;font-family:var(--font-num);font-weight:500;font-size:12px;color:var(--fg)}
+.tl-day.we{background:var(--weekend)}
+.tl-day.td b{color:var(--today);font-weight:700}
+.tl-group{display:flex;background:var(--sunk);border-bottom:1px solid var(--line-soft)}
+.tl-group .tl-lab{background:var(--sunk);font-size:12px;font-weight:700;padding:5px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-group .fill{flex:none;width:calc(var(--days) * var(--day))}
+.tl-row{border-bottom:1px solid var(--line-soft)}
+.tl-row .tl-lab{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.tl-row .u{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-row .cap{font-family:var(--font-num);font-size:12px;color:var(--muted);white-space:nowrap}
+.tl-row .cap.full{color:var(--accent)}
+.tl-row .cap.over{color:var(--bad);font-weight:600}
+.tl-cells{position:relative;flex:none;width:calc(var(--days) * var(--day))}
+.tl-cells .grid{position:absolute;inset:0;display:flex}
+.tl-cells .grid i{width:var(--day);flex:none;border-right:1px solid var(--line-soft)}
+.tl-cells .grid i.we{background:var(--weekend)}
+.tl-cells.can-add{cursor:copy}
+.todayline{position:absolute;top:0;bottom:0;width:2px;background:var(--today);z-index:1;pointer-events:none}
+.bar{position:absolute;height:24px;border-radius:5px;background:var(--bar);color:var(--bar-fg);font-size:12px;font-weight:600;padding:3px 7px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;z-index:1;border:0;text-align:left;line-height:16px}
+.bar.res{background:var(--bar-res);color:var(--fg);outline:1.5px dashed var(--bar);outline-offset:-1.5px}
+.bar.over{box-shadow:inset 0 0 0 2px var(--bad)}
+.bar.cl-l{border-top-left-radius:0;border-bottom-left-radius:0}
+.bar.cl-r{border-top-right-radius:0;border-bottom-right-radius:0}
+.bar .inv{position:absolute;left:0;bottom:0;height:4px}
+.bar .inv.ok{background:var(--ok)}
+.bar .inv.due{background:var(--warn)}
+.bar .ext{position:absolute;top:0;bottom:0;width:0;border-left:2px dotted currentColor;opacity:.7}
+
+/* Bookings list */
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.seg{display:flex;gap:2px;background:var(--sunk);padding:3px;border-radius:8px}
+.seg button{border:0;background:transparent;padding:5px 11px;border-radius:6px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgb(0 0 0/.1)}
+.search{flex:1;min-width:160px;max-width:280px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:880px;font-size:14px}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+td .s{font-size:12px;color:var(--muted)}
+
+/* Drawer */
+.scrim{position:fixed;inset:0;background:rgb(10 20 24/.45);z-index:20}
+.drawer{position:fixed;z-index:21;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;box-shadow:-8px 0 30px rgb(0 0 0/.15)}
+@media (max-width:600px){.drawer{top:auto;max-height:92%;border-left:0;border-top:1px solid var(--line);border-radius:14px 14px 0 0;width:100%}}
+.drawer header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px max(18px,env(safe-area-inset-right,0px)) 12px 18px;padding-top:max(14px,env(safe-area-inset-top,0px));border-bottom:1px solid var(--line)}
+.drawer header h2{margin:0;font-size:17px}
+.drawer .body{overflow-y:auto;padding:16px 18px;display:grid;gap:14px}
+.drawer footer{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 18px;padding-bottom:max(12px,env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
+.drawer footer .grow{flex:1}
+.field{display:grid;gap:5px;min-width:0}
+.field label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.field input,.field select,.field textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);min-width:0}
+.field textarea{min-height:70px;resize:vertical}
+.field .hint{font-size:12px;color:var(--muted)}
+.field .hint.bad{color:var(--bad);font-weight:600}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.calc{background:var(--sunk);border-radius:8px;padding:10px 12px;font-size:13px;display:grid;gap:4px}
+.calc div{display:flex;justify-content:space-between;gap:10px}
+.calc b{font-family:var(--font-num);font-weight:500}
+.quick{display:flex;flex-wrap:wrap;gap:6px}
+.meta{font-size:12px;color:var(--faint)}
+.confirm{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:10px 12px;font-size:13px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,calc(env(safe-area-inset-bottom,0px) + 12px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:30}
+.ro-note{font-size:13px;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+</head>
+<body>
+
+<div class="auth" id="auth" hidden>
+  <form class="auth-card" id="auth-form" novalidate>
+    <svg width="40" height="40" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="var(--accent)"/><path d="M10 18 17 12l7 6M12 17v7h10v-7" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="15.5" y="19" width="3" height="3" rx=".6" fill="var(--today)"/></svg>
+    <div><h1 id="auth-title">Belegungsplan</h1><p id="auth-sub">Monteur Apartments Flensburg · bitte anmelden</p></div>
+    <div class="auth-msg" id="auth-msg" hidden></div>
+    <div class="field" id="auth-email-f"><label for="auth-email">E-Mail</label><input id="auth-email" type="email" autocomplete="username" required></div>
+    <div class="field" id="auth-pw-f"><label for="auth-pw">Passwort</label><input id="auth-pw" type="password" autocomplete="current-password" required></div>
+    <button class="btn primary" id="auth-submit" type="submit">Anmelden</button>
+    <button class="linkbtn" id="auth-forgot" type="button">Passwort vergessen?</button>
+  </form>
+</div>
+
+<div id="app" hidden>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="var(--accent)"/><path d="M10 18 17 12l7 6M12 17v7h10v-7" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="15.5" y="19" width="3" height="3" rx=".6" fill="var(--today)"/></svg>
+      <div><h1>Belegungsplan</h1><small>Monteur Apartments Flensburg · PSA Immobilien</small></div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-ov" data-view="ov" aria-selected="true">Übersicht</button>
+      <button role="tab" id="tab-tl" data-view="tl" aria-selected="false">Belegungsplan</button>
+      <button role="tab" id="tab-ls" data-view="ls" aria-selected="false">Buchungen</button>
+    </div>
+    <button class="btn primary" id="btn-new" hidden>+ Buchung</button>
+    <div class="userbox"><span id="user-name"></span><button class="btn small" id="btn-logout">Abmelden</button></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="kpis" id="kpis"></div>
+  <div id="status-line"></div>
+
+  <section class="view" id="view-ov">
+    <div class="ov-grid">
+      <div class="panel"><header><h2>Abrechnung fällig</h2><span>abgelaufene Nächte ohne Rechnung</span></header><ul class="rows" id="ov-due"></ul></div>
+      <div class="panel"><header><h2>Abreisen in den nächsten 21 Tagen</h2><span>werden frei</span></header><ul class="rows" id="ov-end"></ul></div>
+      <div class="panel"><header><h2>Freie Betten heute</h2><span id="ov-free-sum"></span></header><div class="freelist" id="ov-free"></div></div>
+      <div class="panel"><header><h2>Anreisen in den nächsten 21 Tagen</h2><span>bestätigt &amp; reserviert</span></header><ul class="rows" id="ov-start"></ul></div>
+      <div class="panel" id="ov-over-panel" hidden style="grid-column:1/-1"><header><h2>Überbelegung</h2><span>mehr Personen als Betten</span></header><ul class="rows" id="ov-over"></ul></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-tl" hidden>
+    <div class="tl-bar">
+      <button class="btn small" id="tl-prev" aria-label="Vorheriger Monat">‹</button>
+      <div class="month" id="tl-month"></div>
+      <button class="btn small" id="tl-next" aria-label="Nächster Monat">›</button>
+      <button class="btn small" id="tl-today">Heute</button>
+      <div class="legend">
+        <span><i style="background:var(--bar)"></i>bestätigt</span>
+        <span><i style="background:var(--bar-res);outline:1.5px dashed var(--bar);outline-offset:-1.5px"></i>reserviert</span>
+        <span><i style="background:var(--ok);height:4px"></i>abgerechnet</span>
+        <span><i style="background:var(--warn);height:4px"></i>noch nicht abgerechnet</span>
+      </div>
+    </div>
+    <div class="tl-scroll"><div class="tl" id="tl"></div></div>
+    <p class="ro-note" id="tl-hint"></p>
+  </section>
+
+  <section class="view" id="view-ls" hidden>
+    <div class="filters">
+      <div class="seg" id="ls-seg">
+        <button data-f="active" aria-pressed="true">Laufend &amp; kommend</button>
+        <button data-f="past" aria-pressed="false">Beendet</button>
+        <button data-f="all" aria-pressed="false">Alle</button>
+      </div>
+      <input class="search" id="ls-q" type="search" placeholder="Firma oder Wohnung suchen">
+      <button class="btn small" id="btn-csv" hidden>CSV exportieren</button>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Wohnung</th><th>Firma</th><th class="r">Pers.</th><th>Zeitraum</th><th class="r">Preis</th><th>Abgerechnet bis</th><th class="r">Offen</th><th>Status</th></tr></thead>
+      <tbody id="ls-body"></tbody>
+    </table></div>
+  </section>
+</main>
+</div>
+
+<div id="drawer-root"></div>
+<div class="toast" id="toast" hidden></div>
+<datalist id="companies"></datalist>
+
+<script>
+/* ===== Stammdaten: 11 Standorte, 20 Wohneinheiten ===== */
+const BUILDINGS=[
+ {name:'Alt Frösleer Weg 18 A',units:[['afw-og','Obergeschoss',6],['afw-eg','Erdgeschoss',7],['afw-ug','Untergeschoss',4]]},
+ {name:'Hainstraße 2',units:[['hain-2r','2. OG rechts',4],['hain-2l','2. OG links',4]]},
+ {name:'Harrisleer Straße 88',units:[['h88-1','1. OG',8],['h88-dg','Dachgeschoss',6]]},
+ {name:'Harrisleer Straße 90',units:[['h90-1','1. OG',4],['h90-2','2. OG',4]]},
+ {name:'Johannisstraße 56',units:[['joh','Wohnung',4]]},
+ {name:'Richard-Wagner-Straße 1',units:[['wag-1','1. OG',5]]},
+ {name:'Beethovenstraße 2',units:[['bee-1','1. OG',7]]},
+ {name:'Amselstraße 2',units:[['ams-2','2. OG',6],['ams-3','3. OG',6]]},
+ {name:'Sandbergweg 28',units:[['sand-eg','Erdgeschoss',9],['sand-og','Obergeschoss',11]]},
+ {name:'Vogelbeerenweg 58',units:[['vog','Wohnung',4]]},
+ {name:'Apenrader Straße 188',units:[['ape-ug','Untergeschoss',5],['ape-eg','Erdgeschoss',6],['ape-og','Obergeschoss',7]]},
+];
+const UNITS=[];BUILDINGS.forEach(b=>b.units.forEach(([id,label,cap])=>UNITS.push({id,label,cap,addr:b.name})));
+const UNIT=Object.fromEntries(UNITS.map(u=>[u.id,u]));
+const TOTAL_BEDS=UNITS.reduce((s,u)=>s+u.cap,0);
+const PRICE_MODELS={pp_night:'€ pro Person / Nacht',unit_night:'€ pro Wohnung / Nacht',pp_month:'€ pro Person / Monat',unit_month:'€ pro Wohnung / Monat'};
+const PRICE_SHORT={pp_night:'/P/Nacht',unit_night:'/Whg/Nacht',pp_month:'/P/Monat',unit_month:'/Whg/Monat'};
+
+/* ===== Datum ===== */
+const DAY=864e5;
+const pad=n=>String(n).padStart(2,'0');
+const localISO=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const TODAY=localISO(new Date());
+const toT=s=>Date.UTC(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8,10));
+const fromT=t=>new Date(t).toISOString().slice(0,10);
+const addDays=(s,n)=>fromT(toT(s)+n*DAY);
+const diff=(a,b)=>Math.round((toT(b)-toT(a))/DAY);
+const minD=(a,b)=>a<b?a:b, maxD=(a,b)=>a>b?a:b;
+const addMonths=(s,n)=>{const y=+s.slice(0,4),m=+s.slice(5,7)-1+n,d=+s.slice(8,10);const last=new Date(Date.UTC(y,m+1,0)).getUTCDate();return fromT(Date.UTC(y,m,Math.min(d,last)))};
+const fmt=s=>s?s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(2,4):'—';
+const eur=n=>n.toLocaleString('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+const eur2=n=>n.toLocaleString('de-DE',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2});
+const FAR='9999-12-31';
+
+/* ===== Berechnungen ===== */
+const endOf=b=>b.extendedUntil||b.endOriginal||FAR;
+const perNight=b=>{const p=+b.price||0,n=+b.persons||0;switch(b.priceModel){case'pp_night':return p*n;case'unit_night':return p;case'pp_month':return p*n/30;case'unit_month':return p/30;default:return 0}};
+function phase(b){const e=endOf(b);if(b.start>TODAY)return'future';if(e<=TODAY)return'past';return'now'}
+function billing(b){
+  const end=endOf(b);
+  const billedEnd=b.invoicedUntil?minD(addDays(b.invoicedUntil,1),end):b.start;
+  const dueEnd=minD(TODAY,end);
+  const days=Math.max(0,diff(maxD(billedEnd,b.start),dueEnd));
+  const full=end!==FAR&&billedEnd>=end;
+  return{days,amount:days*perNight(b),full,billedEnd};
+}
+function totalValue(b){const e=endOf(b);if(e===FAR)return null;return diff(b.start,e)*perNight(b)}
+function nightsIn(b,from,to){const s=maxD(b.start,from),e=minD(endOf(b),to);return Math.max(0,diff(s,e))}
+function overbooked(list){
+  // pro Wohnung: höchste gleichzeitige Belegung und erstes Datum der Überbelegung
+  const res={};
+  for(const u of UNITS){
+    const bs=list.filter(b=>b.unitId===u.id);
+    const ev=[];bs.forEach(b=>{ev.push([b.start,+b.persons||0]);if(endOf(b)!==FAR)ev.push([endOf(b),-(+b.persons||0)])});
+    ev.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:a[1]-b[1]);
+    let cur=0;for(const[d,v]of ev){cur+=v;if(cur>u.cap&&(!res[u.id]||cur>res[u.id].peak)){res[u.id]={peak:cur,from:d,ids:bs.filter(b=>b.start<=d&&endOf(b)>d).map(b=>b.id)}}}
+  }
+  return res;
+}
+
+/* ===== Zustand ===== */
+let bookings=[];      // aus db
+let loaded=false;
+let canWrite=false;   // nach user.can()
+let writeKnown=false;
+const SUPABASE_URL='https://vnodcshiyamfeuwhritb.supabase.co';
+const SUPABASE_KEY='sb_publishable_aBqo3fvhIZ8k0g3rXOY0zQ_L2GsKSVT';
+let sb=null, myId=null, memberNames={}, isMember=false, channel=null;
+const downloads=true; // CSV-Download ist auf der eigenen Seite immer möglich
+const db=true;
+let view='ov', tlMonth=TODAY.slice(0,7), lsFilter='active', lsQuery='';
+try{const v=localStorage.getItem('mafl-view');if(['ov','tl','ls'].includes(v))view=v}catch(e){}
+
+const $=s=>document.querySelector(s);
+const el=(tag,attrs={},...kids)=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs)){if(k==='class')e.className=v;else if(k==='text')e.textContent=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v)}kids.flat().forEach(c=>c!=null&&e.append(c));return e};
+function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2200)}
+const unitName=id=>{const u=UNIT[id];return u?(u.label==='Wohnung'?u.addr:u.addr+' · '+u.label):'Unbekannte Wohnung'};
+
+/* ===== Rendering ===== */
+function render(){
+  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.view===view));
+  ['ov','tl','ls'].forEach(v=>$('#view-'+v).hidden=v!==view);
+  $('#btn-new').hidden=!canWrite;
+  $('#btn-csv').hidden=!downloads;
+  renderKpis();renderStatus();
+  if(view==='ov')renderOverview();
+  if(view==='tl')renderTimeline();
+  if(view==='ls')renderList();
+  $('#companies').replaceChildren(...[...new Set(bookings.map(b=>b.company).filter(Boolean))].sort().map(c=>el('option',{value:c})));
+}
+
+function renderStatus(){
+  const s=$('#status-line');s.replaceChildren();
+  if(!loaded){s.append(el('p',{class:'ro-note',text:'Buchungen werden geladen …'}));return}
+  if(!isMember){s.append(el('div',{class:'notice',style:'margin-top:14px'},el('b',{text:'Dein Zugang ist noch nicht freigeschaltet. '}),'Bitte Julian, dich in Supabase als Mitglied einzutragen.'));return}
+  if(!canWrite&&writeKnown)s.append(el('p',{class:'ro-note',style:'margin-top:10px',text:'Du siehst den Belegungsplan im Lesemodus.'}));
+}
+
+function renderKpis(){
+  const now=bookings.filter(b=>phase(b)==='now');
+  const beds=now.reduce((s,b)=>s+(+b.persons||0),0);
+  const units=new Set(now.map(b=>b.unitId)).size;
+  const open=bookings.reduce((s,b)=>s+billing(b).amount,0);
+  const openN=bookings.filter(b=>billing(b).days>0).length;
+  const mFrom=TODAY.slice(0,7)+'-01', mTo=addMonths(mFrom,1);
+  const month=bookings.reduce((s,b)=>s+nightsIn(b,mFrom,mTo)*perNight(b),0);
+  const pct=Math.round(beds/TOTAL_BEDS*100);
+  const k=(lbl,val,sub,meter)=>el('div',{class:'kpi'},el('div',{class:'lbl',text:lbl}),val,el('div',{class:'sub',text:sub}),meter||null);
+  const v=(a,b)=>{const d=el('div',{class:'val'});d.append(a);if(b)d.append(el('small',{text:' '+b}));return d};
+  $('#kpis').replaceChildren(
+    k('Betten belegt heute',v(String(beds),'/ '+TOTAL_BEDS),pct+' % Auslastung',el('div',{class:'meter'},el('i',{style:'width:'+Math.min(100,pct)+'%'}))),
+    k('Wohnungen belegt',v(String(units),'/ '+UNITS.length),(UNITS.length-units)+' komplett frei'),
+    k('Noch nicht abgerechnet',v(eur(open)),openN?openN+' Buchung'+(openN>1?'en':'')+' mit offenen Nächten':'alles abgerechnet'),
+    k('Umsatz '+new Date(toT(mFrom)).toLocaleDateString('de-DE',{month:'long',timeZone:'UTC'}),v(eur(month)),'Schätzung aus Preis × Nächten'),
+  );
+}
+
+function rowItem(b,right){
+  return el('li',{onclick:()=>openDrawer(b.id),tabindex:'0',onkeydown:e=>{if(e.key==='Enter')openDrawer(b.id)}},
+    el('div',{class:'main'},el('div',{class:'t',text:b.company||'Ohne Firma'}),el('div',{class:'s',text:unitName(b.unitId)+' · '+(b.persons||0)+' Pers.'})),
+    el('div',{class:'r'},right));
+}
+function renderOverview(){
+  const due=bookings.map(b=>({b,bl:billing(b)})).filter(x=>x.bl.days>0).sort((a,c)=>c.bl.days-a.bl.days);
+  $('#ov-due').replaceChildren(...(due.length?due.map(({b,bl})=>rowItem(b,el('div',{},
+      el('span',{class:'pill '+(bl.days>=30||phase(b)==='past'?'bad':'warn'),text:bl.days+' Nächte · '+eur(bl.amount)}),
+      el('div',{class:'s',style:'font-size:12px;color:var(--muted);margin-top:3px',text:'abgerechnet bis '+fmt(b.invoicedUntil)})))):
+    [el('li',{class:'empty',style:'cursor:default',text:loaded&&bookings.length?'Alle abgelaufenen Nächte sind abgerechnet.':'Noch keine Buchungen eingetragen.'})]));
+
+  const in21=addDays(TODAY,21);
+  const ends=bookings.filter(b=>phase(b)!=='past'&&endOf(b)!==FAR&&endOf(b)<=in21).sort((a,c)=>endOf(a)<endOf(c)?-1:1);
+  $('#ov-end').replaceChildren(...(ends.length?ends.map(b=>rowItem(b,el('span',{class:'pill info',text:'Abreise '+fmt(endOf(b))+' · in '+diff(TODAY,endOf(b))+' T.'}))):[el('li',{class:'empty',style:'cursor:default',text:'Keine Abreisen in den nächsten drei Wochen.'})]));
+
+  const starts=bookings.filter(b=>b.start>TODAY&&b.start<=in21).sort((a,c)=>a.start<c.start?-1:1);
+  $('#ov-start').replaceChildren(...(starts.length?starts.map(b=>rowItem(b,el('span',{class:'pill '+(b.state==='reserved'?'neutral':'ok'),text:fmt(b.start)+(b.state==='reserved'?' · reserviert':'')}))):[el('li',{class:'empty',style:'cursor:default',text:'Keine Anreisen in den nächsten drei Wochen.'})]));
+
+  let freeBeds=0;
+  const chips=UNITS.map(u=>{const used=bookings.filter(b=>b.unitId===u.id&&phase(b)==='now').reduce((s,b)=>s+(+b.persons||0),0);const free=u.cap-used;if(free<=0)return null;freeBeds+=free;
+    return el('button',{class:'chip',title:'Neue Buchung für diese Wohnung',onclick:()=>canWrite?openDrawer(null,{unitId:u.id,start:TODAY}):(view='tl',save(),render())},unitName(u.id)+' · ',el('b',{text:free+(used?'/'+u.cap:'')}),' frei')}).filter(Boolean);
+  $('#ov-free-sum').textContent=freeBeds+' von '+TOTAL_BEDS;
+  $('#ov-free').replaceChildren(...(chips.length?chips:[el('span',{class:'empty',style:'padding:0',text:'Heute ist alles belegt.'})]));
+
+  const ob=overbooked(bookings);const keys=Object.keys(ob);
+  $('#ov-over-panel').hidden=!keys.length;
+  $('#ov-over').replaceChildren(...keys.map(id=>{const o=ob[id];const b=bookings.find(x=>x.id===o.ids[0]);
+    return el('li',{onclick:()=>b&&openDrawer(b.id)},el('div',{class:'main'},el('div',{class:'t',text:unitName(id)}),el('div',{class:'s',text:'ab '+fmt(o.from)+' · '+o.ids.length+' Buchung(en) gleichzeitig'})),el('span',{class:'pill bad',text:o.peak+' Pers. / '+UNIT[id].cap+' Betten'}))}));
+}
+
+function renderTimeline(){
+  const from=tlMonth+'-01', to=addMonths(from,1), days=diff(from,to);
+  $('#tl-month').textContent=new Date(toT(from)).toLocaleDateString('de-DE',{month:'long',year:'numeric',timeZone:'UTC'});
+  const tl=$('#tl');tl.style.setProperty('--days',days);
+  const dayList=[...Array(days)].map((_,i)=>addDays(from,i));
+  const isWe=d=>{const w=new Date(toT(d)).getUTCDay();return w===0||w===6};
+  const wd=['So','Mo','Di','Mi','Do','Fr','Sa'];
+  const head=el('div',{class:'tl-head'},el('div',{class:'tl-lab',text:'Wohnung · Betten'}),
+    el('div',{class:'tl-days'},dayList.map(d=>el('div',{class:'tl-day'+(isWe(d)?' we':'')+(d===TODAY?' td':'')},el('b',{text:String(+d.slice(8))}),wd[new Date(toT(d)).getUTCDay()]))));
+  const ob=overbooked(bookings);const overIds=new Set(Object.values(ob).flatMap(o=>o.ids));
+  const out=[head];
+  const cs=getComputedStyle(tl);const dayPx=()=>parseFloat(cs.getPropertyValue('--day'))||30;
+  for(const bld of BUILDINGS){
+    out.push(el('div',{class:'tl-group'},el('div',{class:'tl-lab',text:bld.name}),el('div',{class:'fill'})));
+    for(const[uid,label,cap]of bld.units){
+      const bs=bookings.filter(b=>b.unitId===uid&&b.start<to&&endOf(b)>from).sort((a,c)=>a.start<c.start?-1:1);
+      const lanes=[];bs.forEach(b=>{let i=lanes.findIndex(e=>e<=b.start);if(i<0){i=lanes.length;lanes.push('')}lanes[i]=endOf(b);b._lane=i});
+      const h=Math.max(1,lanes.length)*28+6;
+      const nowUsed=bookings.filter(b=>b.unitId===uid&&phase(b)==='now').reduce((s,b)=>s+(+b.persons||0),0);
+      const cells=el('div',{class:'tl-cells'+(canWrite?' can-add':''),style:'height:'+h+'px'},
+        el('div',{class:'grid'},dayList.map(d=>el('i',{class:isWe(d)?'we':''}))));
+      if(canWrite)cells.addEventListener('click',e=>{if(e.target.closest('.bar'))return;const r=cells.getBoundingClientRect();const i=Math.floor((e.clientX-r.left)/(r.width/days));openDrawer(null,{unitId:uid,start:dayList[Math.max(0,Math.min(days-1,i))]})});
+      if(TODAY>=from&&TODAY<to)cells.append(el('div',{class:'todayline',style:'left:calc('+diff(from,TODAY)+' * var(--day) + var(--day)/2 - 1px)'}));
+      for(const b of bs){
+        const s=maxD(b.start,from),e=minD(endOf(b),to);
+        const x=diff(from,s),w=Math.max(1,diff(s,e));
+        const bl=billing(b);
+        const bar=el('button',{class:'bar'+(b.state==='reserved'?' res':'')+(overIds.has(b.id)?' over':'')+(b.start<from?' cl-l':'')+(endOf(b)>to?' cl-r':''),
+          style:'left:calc('+x+' * var(--day) + 2px);width:calc('+w+' * var(--day) - 4px);top:'+(4+b._lane*28)+'px',
+          title:(b.company||'')+' · '+(b.persons||0)+' Pers. · '+fmt(b.start)+' – '+(endOf(b)===FAR?'offen':fmt(endOf(b))),
+          onclick:()=>openDrawer(b.id)},(b.company||'Ohne Firma')+' · '+(b.persons||0)+'P');
+        // Abrechnungsstreifen: grün bis "abgerechnet bis", orange bis heute
+        const span=e===s?1:diff(s,e);
+        const pct=d=>Math.max(0,Math.min(100,diff(s,d)/span*100));
+        const billedEnd=bl.billedEnd;
+        if(b.state!=='reserved'){
+          const g=pct(billedEnd);if(g>0)bar.append(el('span',{class:'inv ok',style:'width:'+g+'%'}));
+          const dueTo=minD(TODAY,endOf(b));const o=pct(dueTo);if(o>g)bar.append(el('span',{class:'inv due',style:'left:'+g+'%;width:'+(o-g)+'%'}));
+        }
+        if(b.extendedUntil&&b.endOriginal&&b.endOriginal>s&&b.endOriginal<e)bar.append(el('span',{class:'ext',title:'ursprüngliche Abreise '+fmt(b.endOriginal),style:'left:'+pct(b.endOriginal)+'%'}));
+        cells.append(bar);
+      }
+      out.push(el('div',{class:'tl-row'},
+        el('div',{class:'tl-lab'},el('span',{class:'u',text:label}),el('span',{class:'cap num'+(nowUsed>cap?' over':nowUsed===cap?' full':''),title:'heute belegt / Betten',text:nowUsed+'/'+cap})),cells));
+    }
+  }
+  tl.replaceChildren(...out);
+  $('#tl-hint').textContent=canWrite?'Tippe auf einen freien Tag in einer Zeile, um dort eine Buchung anzulegen. Die Zahl neben der Wohnung zeigt heute belegte Betten / Betten gesamt.':'Die Zahl neben der Wohnung zeigt heute belegte Betten / Betten gesamt.';
+}
+
+function renderList(){
+  document.querySelectorAll('#ls-seg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.f===lsFilter));
+  const q=lsQuery.trim().toLowerCase();
+  let list=bookings.filter(b=>lsFilter==='all'||(lsFilter==='past'?phase(b)==='past':phase(b)!=='past'));
+  if(q)list=list.filter(b=>(b.company||'').toLowerCase().includes(q)||unitName(b.unitId).toLowerCase().includes(q)||(b.contact||'').toLowerCase().includes(q));
+  list.sort((a,c)=>lsFilter==='past'?(endOf(a)<endOf(c)?1:-1):(a.start<c.start?-1:1));
+  const body=$('#ls-body');
+  if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'8',class:'empty',text:bookings.length?'Keine Buchungen für diesen Filter.':(canWrite?'Noch keine Buchungen. Lege die erste über „+ Buchung“ an.':'Noch keine Buchungen eingetragen.')})));return}
+  body.replaceChildren(...list.map(b=>{
+    const bl=billing(b),ph=phase(b);
+    const status=b.state==='reserved'?el('span',{class:'pill neutral',text:'reserviert'}):ph==='future'?el('span',{class:'pill info',text:'kommend'}):ph==='now'?el('span',{class:'pill ok',text:'läuft'}):el('span',{class:'pill neutral',text:'beendet'});
+    const ext=b.extendedUntil?el('div',{class:'s',text:'ursprünglich bis '+fmt(b.endOriginal)}):null;
+    return el('tr',{onclick:()=>openDrawer(b.id)},
+      el('td',{},el('div',{text:UNIT[b.unitId]?.addr||'—'}),el('div',{class:'s',text:UNIT[b.unitId]?.label||''})),
+      el('td',{},el('div',{text:b.company||'—'}),b.contact?el('div',{class:'s',text:b.contact}):null),
+      el('td',{class:'r num',text:String(b.persons||0)}),
+      el('td',{},el('div',{class:'num',text:fmt(b.start)+' – '+(endOf(b)===FAR?'offen':fmt(endOf(b)))}),ext),
+      el('td',{class:'r'},el('div',{class:'num',text:b.price?eur2(+b.price):'—'}),el('div',{class:'s',text:PRICE_SHORT[b.priceModel]||''})),
+      el('td',{class:'num'},bl.full?el('span',{class:'pill ok',text:'komplett'}):document.createTextNode(fmt(b.invoicedUntil))),
+      el('td',{class:'r'},bl.days?el('div',{},el('div',{class:'num',text:eur(bl.amount)}),el('div',{class:'s',text:bl.days+' Nächte'})):el('span',{class:'s',text:'—'})),
+      el('td',{},status));
+  }));
+}
+
+/* ===== Drawer / Formular ===== */
+let editing=null;
+function openDrawer(id,preset){
+  const b=id?bookings.find(x=>x.id===id):null;
+  editing={id:id||null,data:b?{...b}:{unitId:preset?.unitId||UNITS[0].id,company:'',contact:'',persons:'',start:preset?.start||TODAY,endOriginal:'',extendedUntil:'',price:'',priceModel:'pp_night',invoicedUntil:'',state:'confirmed',notes:''}};
+  drawDrawer();
+}
+function closeDrawer(){editing=null;$('#drawer-root').replaceChildren()}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&editing)closeDrawer()});
+
+async function drawDrawer(){
+  const d=editing.data, ro=!canWrite, isNew=!editing.id;
+  const f=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
+  const inp=(id,key,type='text',extra={})=>{const i=el('input',{id,type,value:d[key]??'',...extra});i.disabled=ro;i.addEventListener('input',()=>{d[key]=type==='number'?(i.value===''?'':+i.value):i.value;updateCalc()});return i};
+  const unitSel=el('select',{id:'f-unit'},BUILDINGS.map(bld=>el('optgroup',{label:bld.name},bld.units.map(([uid,label,cap])=>el('option',{value:uid,text:label+' ('+cap+' Betten)'})))));
+  unitSel.value=d.unitId;unitSel.disabled=ro;unitSel.addEventListener('change',()=>{d.unitId=unitSel.value;updateCalc()});
+  const modelSel=el('select',{id:'f-model'},Object.entries(PRICE_MODELS).map(([k,v])=>el('option',{value:k,text:v})));
+  modelSel.value=d.priceModel||'pp_night';modelSel.disabled=ro;modelSel.addEventListener('change',()=>{d.priceModel=modelSel.value;updateCalc()});
+  const stateSel=el('select',{id:'f-state'},el('option',{value:'confirmed',text:'Bestätigt'}),el('option',{value:'reserved',text:'Reserviert (unverbindlich)'}));
+  stateSel.value=d.state||'confirmed';stateSel.disabled=ro;stateSel.addEventListener('change',()=>{d.state=stateSel.value});
+  const notes=el('textarea',{id:'f-notes'});notes.value=d.notes||'';notes.disabled=ro;notes.addEventListener('input',()=>d.notes=notes.value);
+  const persHint=el('div',{class:'hint'});
+  const endHint=el('div',{class:'hint'});
+  const calc=el('div',{class:'calc'});
+  const invInput=inp('f-inv','invoicedUntil','date');
+  const quick=el('div',{class:'quick'});
+  if(!ro){
+    const setInv=v=>{d.invoicedUntil=v;invInput.value=v;updateCalc()};
+    quick.append(
+      el('button',{type:'button',class:'btn small',onclick:()=>setInv(addDays(addMonths(d.invoicedUntil?addDays(d.invoicedUntil,1):d.start,1),-1))},'+1 Monat'),
+      el('button',{type:'button',class:'btn small',onclick:()=>setInv(addDays(TODAY,-1))},'bis gestern'),
+      el('button',{type:'button',class:'btn small',onclick:()=>{const e=endOf(d);if(e!==FAR)setInv(addDays(e,-1))}},'bis Abreise'));
+  }
+  function updateCalc(){
+    const u=UNIT[d.unitId];const p=+d.persons||0;
+    persHint.className='hint'+(u&&p>u.cap?' bad':'');
+    persHint.textContent=u?(p>u.cap?'Mehr Personen als Betten ('+u.cap+')!':u.cap+' Betten in dieser Wohnung'):'';
+    const e=endOf(d);
+    endHint.textContent=d.endOriginal&&d.start&&d.endOriginal<=d.start?'Abreise muss nach der Anreise liegen.':(e!==FAR&&d.start?diff(d.start,e)+' Nächte'+(d.extendedUntil?' inkl. Verlängerung':''):'Leer lassen, wenn das Ende noch offen ist.');
+    endHint.className='hint'+(d.endOriginal&&d.endOriginal<=d.start?' bad':'');
+    const pn=perNight(d),tv=totalValue(d),bl=d.start?billing(d):{days:0,amount:0};
+    // Konflikte mit anderen Buchungen derselben Wohnung
+    const others=bookings.filter(b=>b.id!==editing.id);
+    const ob=overbooked([...others,{...d,id:'_draft'}])[d.unitId];
+    const rows=[
+      ['Pro Nacht',pn?eur2(pn):'—'],
+      ['Pro Monat (30 Nächte)',pn?eur(pn*30):'—'],
+      ['Gesamtwert',tv!=null&&pn?eur(tv):(e===FAR?'Ende offen':'—')],
+      ['Noch nicht abgerechnet',bl.days?bl.days+' Nächte · '+eur(bl.amount):'nichts offen'],
+    ];
+    calc.replaceChildren(...rows.map(([a,v])=>el('div',{},el('span',{text:a}),el('b',{text:v}))),
+      ob&&ob.ids.includes('_draft')?el('div',{style:'color:var(--bad);font-weight:600'},el('span',{text:'Überbelegung ab '+fmt(ob.from)+': '+ob.peak+' Pers. bei '+UNIT[d.unitId].cap+' Betten'})):null);
+  }
+  const confirmBox=el('div');
+  const metaLine=el('div',{class:'meta'});
+  const footer=el('footer',{});
+  if(ro){footer.append(el('span',{class:'ro-note grow',text:'Lesemodus'}),el('button',{class:'btn',onclick:closeDrawer},'Schließen'))}
+  else{
+    const saveBtn=el('button',{class:'btn primary',onclick:()=>saveBooking(saveBtn)},isNew?'Buchung anlegen':'Speichern');
+    footer.append(
+      isNew?null:el('button',{class:'btn danger',onclick:()=>{confirmBox.replaceChildren(el('div',{class:'confirm'},el('span',{text:'Buchung wirklich löschen?'}),el('button',{class:'btn small danger',onclick:()=>deleteBooking()},'Löschen'),el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')))}},'Löschen'),
+      el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Abbrechen'),saveBtn);
+  }
+  const drawer=el('div',{class:'drawer',role:'dialog','aria-modal':'true','aria-labelledby':'d-title'},
+    el('header',{},el('h2',{id:'d-title',text:isNew?'Neue Buchung':(d.company||'Buchung')}),el('button',{class:'btn small',onclick:closeDrawer,'aria-label':'Schließen'},'✕')),
+    el('div',{class:'body'},
+      f('f-unit','Wohnung',unitSel),
+      f('f-company','Firma',inp('f-company','company','text',{list:'companies',placeholder:'z. B. Elektro Hansen GmbH',autocomplete:'off'})),
+      f('f-contact','Ansprechpartner / Telefon',inp('f-contact','contact','text',{placeholder:'Name, Telefon oder E-Mail'})),
+      el('div',{class:'two'},f('f-persons','Personen',inp('f-persons','persons','number',{min:'1',step:'1',inputmode:'numeric'}),persHint),f('f-state','Status',stateSel)),
+      el('div',{class:'two'},f('f-start','Anreise',inp('f-start','start','date')),f('f-end','Abreise (ursprünglich)',inp('f-end','endOriginal','date'))),
+      f('f-ext','Verlängert bis',inp('f-ext','extendedUntil','date'),endHint),
+      el('div',{class:'two'},f('f-price','Preis',inp('f-price','price','number',{min:'0',step:'0.5',inputmode:'decimal',placeholder:'z. B. 25'})),f('f-model','Preis gilt',modelSel)),
+      f('f-inv','Rechnung geschrieben bis (einschließlich)',invInput,quick),
+      calc,
+      f('f-notes','Notizen',notes),
+      confirmBox,metaLine),
+    footer);
+  $('#drawer-root').replaceChildren(el('div',{class:'scrim',onclick:closeDrawer}),drawer);
+  updateCalc();
+  if(!ro)setTimeout(()=>(isNew?$('#f-company'):null)?.focus(),50);
+  if(!isNew&&d.updatedAt){
+    const who=d.updatedBy?(memberNames[d.updatedBy]||''):'';
+    metaLine.textContent='Zuletzt geändert'+(who?' von '+who:'')+' am '+new Date(d.updatedAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'});
+  }
+}
+
+function validate(d){
+  if(!UNIT[d.unitId])return'Bitte eine Wohnung wählen.';
+  if(!d.company||!d.company.trim())return'Bitte die Firma eintragen.';
+  if(!(+d.persons>0))return'Bitte die Anzahl Personen eintragen.';
+  if(!d.start)return'Bitte das Anreisedatum eintragen.';
+  if(d.endOriginal&&d.endOriginal<=d.start)return'Die Abreise muss nach der Anreise liegen.';
+  if(d.extendedUntil&&d.extendedUntil<=d.start)return'„Verlängert bis“ muss nach der Anreise liegen.';
+  return null;
+}
+/* ===== Speichern (Supabase) ===== */
+const toRow=d=>({unit_id:d.unitId,company:d.company.trim(),contact:(d.contact||'').trim(),persons:+d.persons,start_date:d.start,
+  end_original:d.endOriginal||null,extended_until:d.extendedUntil||null,price:d.price===''||d.price==null?null:+d.price,
+  price_model:d.priceModel||'pp_night',invoiced_until:d.invoicedUntil||null,state:d.state||'confirmed',notes:d.notes||''});
+const fromRow=r=>({id:r.id,unitId:r.unit_id,company:r.company||'',contact:r.contact||'',persons:r.persons,start:r.start_date,
+  endOriginal:r.end_original||'',extendedUntil:r.extended_until||'',price:r.price==null?'':+r.price,priceModel:r.price_model,
+  invoicedUntil:r.invoiced_until||'',state:r.state,notes:r.notes||'',updatedAt:r.updated_at,updatedBy:r.updated_by,createdAt:r.created_at,createdBy:r.created_by});
+
+async function saveBooking(btn){
+  const d=editing.data;const err=validate(d);if(err){toast(err);return}
+  btn.disabled=true;
+  const row=toRow(d);
+  const q=editing.id?sb.from('bookings').update(row).eq('id',editing.id).select():sb.from('bookings').insert(row).select();
+  const {data,error}=await q;
+  if(error||!data||!data.length){
+    btn.disabled=false;
+    if(!error||error.code==='42501'){toast('Du hast für diesen Plan nur Leserechte.');return}
+    toast('Speichern hat nicht geklappt: '+error.message);return;
+  }
+  closeDrawer();toast('Gespeichert');await loadBookings();
+}
+async function deleteBooking(){
+  const {error}=await sb.from('bookings').delete().eq('id',editing.id);
+  if(error){toast('Löschen hat nicht geklappt.');return}
+  closeDrawer();toast('Buchung gelöscht');await loadBookings();
+}
+
+/* ===== CSV ===== */
+function exportCsv(){
+  const head=['Adresse','Wohnung','Firma','Kontakt','Personen','Status','Anreise','Abreise ursprünglich','Verlängert bis','Preis','Preismodell','Abgerechnet bis','Offene Nächte','Offener Betrag','Notizen'];
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const rows=bookings.slice().sort((a,c)=>a.start<c.start?-1:1).map(b=>{const bl=billing(b);return[UNIT[b.unitId]?.addr,UNIT[b.unitId]?.label,b.company,b.contact,b.persons,b.state==='reserved'?'reserviert':'bestätigt',fmt(b.start),fmt(b.endOriginal),fmt(b.extendedUntil),b.price===''?'':String(b.price).replace('.',','),PRICE_MODELS[b.priceModel]||'',fmt(b.invoicedUntil),bl.days,bl.amount.toFixed(2).replace('.',','),b.notes].map(q).join(';')});
+  const blob=new Blob(['﻿'+[head.map(q).join(';'),...rows].join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='belegungsplan-'+TODAY+'.csv';document.body.append(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+}
+/* ===== Events ===== */
+function save(){try{localStorage.setItem('mafl-view',view)}catch(e){}}
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;save();render()}));
+$('#btn-new').addEventListener('click',()=>openDrawer(null,view==='tl'?{start:tlMonth===TODAY.slice(0,7)?TODAY:tlMonth+'-01'}:null));
+$('#tl-prev').addEventListener('click',()=>{tlMonth=addMonths(tlMonth+'-01',-1).slice(0,7);renderTimeline()});
+$('#tl-next').addEventListener('click',()=>{tlMonth=addMonths(tlMonth+'-01',1).slice(0,7);renderTimeline()});
+$('#tl-today').addEventListener('click',()=>{tlMonth=TODAY.slice(0,7);renderTimeline()});
+document.querySelectorAll('#ls-seg button').forEach(b=>b.addEventListener('click',()=>{lsFilter=b.dataset.f;renderList()}));
+$('#ls-q').addEventListener('input',e=>{lsQuery=e.target.value;renderList()});
+$('#btn-csv').addEventListener('click',exportCsv);
+
+/* ===== Login & Start ===== */
+// Typ des Links aus der E-Mail merken, bevor Supabase die Adresse aufräumt
+const LINK_TYPE=(new URLSearchParams(location.hash.slice(1)).get('type'))||'';
+let authMode=(LINK_TYPE==='invite'||LINK_TYPE==='recovery')?'setpw':'login';
+
+function authMsg(text,kind){const m=$('#auth-msg');m.hidden=!text;m.textContent=text||'';m.className='auth-msg '+(kind||'err')}
+function showAuth(mode){
+  authMode=mode||authMode;
+  $('#app').hidden=true;$('#auth').hidden=false;
+  const setpw=authMode==='setpw', forgot=authMode==='forgot';
+  $('#auth-title').textContent=setpw?'Passwort festlegen':forgot?'Passwort zurücksetzen':'Belegungsplan';
+  $('#auth-sub').textContent=setpw?'Wähle ein Passwort mit mindestens 8 Zeichen.':forgot?'Wir schicken dir einen Link per E-Mail.':'Monteur Apartments Flensburg · bitte anmelden';
+  $('#auth-email-f').hidden=setpw;
+  $('#auth-pw-f').hidden=forgot;
+  $('#auth-pw').autocomplete=setpw?'new-password':'current-password';
+  $('#auth-submit').textContent=setpw?'Passwort speichern':forgot?'Link senden':'Anmelden';
+  $('#auth-forgot').textContent=forgot?'Zurück zur Anmeldung':'Passwort vergessen?';
+  $('#auth-forgot').hidden=setpw;
+}
+$('#auth-forgot').addEventListener('click',()=>{authMsg('');showAuth(authMode==='forgot'?'login':'forgot')});
+$('#auth-form').addEventListener('submit',async e=>{
+  e.preventDefault();authMsg('');
+  const email=$('#auth-email').value.trim(), pw=$('#auth-pw').value, btn=$('#auth-submit');
+  btn.disabled=true;
+  try{
+    if(authMode==='login'){
+      const {error}=await sb.auth.signInWithPassword({email,password:pw});
+      if(error)authMsg('E-Mail oder Passwort stimmt nicht.');
+    }else if(authMode==='forgot'){
+      const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+      authMsg(error?'Das hat nicht geklappt: '+error.message:'Falls die Adresse bekannt ist, ist eine E-Mail unterwegs.',error?'err':'ok');
+    }else{
+      if(pw.length<8){authMsg('Das Passwort braucht mindestens 8 Zeichen.');return}
+      const {error}=await sb.auth.updateUser({password:pw});
+      if(error){authMsg('Das hat nicht geklappt: '+error.message);return}
+      authMode='login';history.replaceState(null,'',location.pathname);
+      const {data}=await sb.auth.getSession();if(data.session)startApp(data.session);
+    }
+  }finally{btn.disabled=false}
+});
+$('#btn-logout').addEventListener('click',async()=>{await sb.auth.signOut()});
+
+async function loadBookings(){
+  const {data,error}=await sb.from('bookings').select('*').order('start_date');
+  if(error){toast('Buchungen konnten nicht geladen werden.');return}
+  bookings=data.map(fromRow);loaded=true;render();
+  if(editing&&editing.id&&!bookings.find(b=>b.id===editing.id)){closeDrawer();toast('Diese Buchung wurde gelöscht.')}
+}
+let started=null;
+async function startApp(session){
+  if(authMode==='setpw')return showAuth('setpw');
+  if(started===session.user.id)return;
+  started=session.user.id;myId=session.user.id;
+  $('#auth').hidden=true;$('#app').hidden=false;
+  const {data:mem}=await sb.from('members').select('user_id,name,can_edit');
+  memberNames=Object.fromEntries((mem||[]).map(m=>[m.user_id,m.name||'']));
+  const me=(mem||[]).find(m=>m.user_id===myId);
+  isMember=!!me;canWrite=!!me?.can_edit;writeKnown=true;
+  $('#user-name').textContent=me?.name||session.user.email;
+  render();
+  await loadBookings();
+  if(channel)sb.removeChannel(channel);
+  let t=null;
+  channel=sb.channel('bookings-live').on('postgres_changes',{event:'*',schema:'public',table:'bookings'},()=>{clearTimeout(t);t=setTimeout(loadBookings,300)}).subscribe();
+}
+function stopApp(){
+  started=null;bookings=[];loaded=false;isMember=false;canWrite=false;closeDrawer();
+  if(channel){sb.removeChannel(channel);channel=null}
+  showAuth('login');
+}
+
+render();
+if(!window.supabase){showAuth('login');authMsg('Die Seite konnte nicht vollständig laden. Bitte neu laden.')}
+else{
+  sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+  sb.auth.onAuthStateChange((event,session)=>{
+    if(event==='PASSWORD_RECOVERY'){authMode='setpw';showAuth('setpw');return}
+    if(session)setTimeout(()=>startApp(session),0);else stopApp();
+  });
+  // Daten nach Rückkehr in die App auffrischen (z. B. am Handy)
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&started)loadBookings()});
+}
+</script>
+</body>
+</html>
