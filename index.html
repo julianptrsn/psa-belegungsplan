@@ -267,6 +267,7 @@ td .s{font-size:12px;color:var(--muted)}
       <div class="panel"><header><h2>Abreisen in den nächsten 21 Tagen</h2><span>werden frei</span></header><ul class="rows" id="ov-end"></ul></div>
       <div class="panel"><header><h2>Freie Betten heute</h2><span id="ov-free-sum"></span></header><div class="freelist" id="ov-free"></div></div>
       <div class="panel"><header><h2>Anreisen in den nächsten 21 Tagen</h2><span>bestätigt &amp; reserviert</span></header><ul class="rows" id="ov-start"></ul></div>
+      <div class="panel" id="ov-open-panel" hidden style="grid-column:1/-1"><header><h2>Ohne Abreise und ohne Rechnung</h2><span>gelten als belegt ohne Ende – bitte Abreise eintragen</span></header><ul class="rows" id="ov-open"></ul></div>
       <div class="panel" id="ov-over-panel" hidden style="grid-column:1/-1"><header><h2>Überbelegung</h2><span>mehr Personen als Betten</span></header><ul class="rows" id="ov-over"></ul></div>
     </div>
   </section>
@@ -350,7 +351,7 @@ const FAR='9999-12-31';
 /* ===== Berechnungen ===== */
 // Abreise/Verlängert bis = letzter belegter Tag (einschließlich), wie auf den Rechnungen.
 // endOf() liefert intern den Tag danach, damit Nächte = diff(Anreise, endOf).
-const lastDay=b=>b.extendedUntil||b.endOriginal||'';
+const lastDay=b=>b.extendedUntil||b.endOriginal||b.invoicedUntil||'';
 const endOf=b=>{const e=lastDay(b);return e?addDays(e,1):FAR};
 const endTxt=b=>lastDay(b)?fmt(lastDay(b)):'offen';
 const perNight=b=>{const p=+b.price||0,n=+b.persons||0;switch(b.priceModel){case'pp_night':return p*n;case'unit_night':return p;case'pp_month':return p*n/30;case'unit_month':return p/30;default:return 0}};
@@ -488,6 +489,9 @@ function renderOverview(){
   $('#ov-free-sum').textContent=freeBeds+' von '+TOTAL_BEDS;
   $('#ov-free').replaceChildren(...(chips.length?chips:[el('span',{class:'empty',style:'padding:0',text:'Heute ist alles belegt.'})]));
 
+  const openEnd=bookings.filter(b=>!lastDay(b)).sort((a,c)=>a.start<c.start?-1:1);
+  $('#ov-open-panel').hidden=!openEnd.length;
+  $('#ov-open').replaceChildren(...openEnd.map(b=>rowItem(b,el('span',{class:'pill warn',text:'seit '+fmt(b.start)+' · Ende offen'}))));
   const ob=overbooked(bookings);const keys=Object.keys(ob);
   $('#ov-over-panel').hidden=!keys.length;
   $('#ov-over').replaceChildren(...keys.map(id=>{const o=ob[id];const b=bookings.find(x=>x.id===o.ids[0]);
@@ -554,7 +558,7 @@ function renderList(){
   if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'9',class:'empty',text:bookings.length?'Keine Buchungen für diesen Filter.':(canWrite?'Noch keine Buchungen. Lege die erste über „+ Buchung“ an.':'Noch keine Buchungen eingetragen.')})));return}
   body.replaceChildren(...list.map(b=>{
     const bl=billing(b),ph=phase(b);
-    const status=b.state==='reserved'?el('span',{class:'pill neutral',text:'reserviert'}):ph==='future'?el('span',{class:'pill info',text:'kommend'}):ph==='now'?el('span',{class:'pill ok',text:'läuft'}):el('span',{class:'pill neutral',text:'beendet'});
+    const status=!lastDay(b)?el('span',{class:'pill warn',text:'Ende offen'}):b.state==='reserved'?el('span',{class:'pill neutral',text:'reserviert'}):ph==='future'?el('span',{class:'pill info',text:'kommend'}):ph==='now'?el('span',{class:'pill ok',text:'läuft'}):el('span',{class:'pill neutral',text:'beendet'});
     const ext=b.extendedUntil?el('div',{class:'s',text:'ursprünglich bis '+fmt(b.endOriginal)}):null;
     return el('tr',{onclick:()=>openDrawer(b.id)},
       el('td',{},el('div',{text:UNIT[b.unitId]?.addr||'—'}),el('div',{class:'s',text:UNIT[b.unitId]?.label||''})),
