@@ -270,6 +270,7 @@ td .s{font-size:12px;color:var(--muted)}
       <div class="panel"><header><h2>Abreisen in den nächsten 21 Tagen</h2><span>werden frei</span></header><ul class="rows" id="ov-end"></ul></div>
       <div class="panel"><header><h2>Freie Betten heute</h2><span id="ov-free-sum"></span></header><div class="freelist" id="ov-free"></div></div>
       <div class="panel"><header><h2>Anreisen in den nächsten 21 Tagen</h2><span>bestätigt &amp; reserviert</span></header><ul class="rows" id="ov-start"></ul></div>
+      <div class="panel" id="ov-orphan-panel" hidden style="grid-column:1/-1"><header><h2>Rechnungen ohne Buchung</h2><span>die Buchung wurde gelöscht – tippen, um sie neu anzulegen</span></header><ul class="rows" id="ov-orphan"></ul></div>
       <div class="panel" id="ov-open-panel" hidden style="grid-column:1/-1"><header><h2>Ohne Abreise und ohne Rechnung</h2><span>gelten als belegt ohne Ende – bitte Abreise eintragen</span></header><ul class="rows" id="ov-open"></ul></div>
       <div class="panel" id="ov-over-panel" hidden style="grid-column:1/-1"><header><h2>Überbelegung</h2><span>mehr Personen als Betten</span></header><ul class="rows" id="ov-over"></ul></div>
     </div>
@@ -502,6 +503,11 @@ function renderOverview(){
   $('#ov-free-sum').textContent=freeBeds+' von '+scopeBeds;
   $('#ov-free').replaceChildren(...(chips.length?chips:[el('span',{class:'empty',style:'padding:0',text:'Heute ist alles belegt.'})]));
 
+  const orphans=invoices.filter(i=>inScope(i.unit_id)&&(!i.booking_id||!bookings.find(b=>b.id===i.booking_id)));
+  $('#ov-orphan-panel').hidden=!orphans.length;
+  $('#ov-orphan').replaceChildren(...orphans.map(i=>el('li',{tabindex:'0',onclick:()=>openOrphan(i),onkeydown:e=>{if(e.key==='Enter')openOrphan(i)}},
+    el('div',{class:'main'},el('div',{class:'t',text:(i.customer||'Kunde unbekannt')+' · Nr. '+i.number}),el('div',{class:'s',text:(UNIT[i.unit_id]?unitName(i.unit_id):'Wohnung unbekannt')+' · '+fmt(i.period_start)+' – '+fmt(i.period_end)})),
+    el('span',{class:'pill warn',text:i.total!=null?eur2(+i.total):'ohne Buchung'}))));
   const openEnd=SB().filter(b=>!lastDay(b)).sort((a,c)=>a.start<c.start?-1:1);
   $('#ov-open-panel').hidden=!openEnd.length;
   $('#ov-open').replaceChildren(...openEnd.map(b=>rowItem(b,el('span',{class:'pill warn',text:'seit '+fmt(b.start)+' · Ende offen'}))));
@@ -590,8 +596,19 @@ function renderList(){
 let editing=null;
 function openDrawer(id,preset){
   const b=id?bookings.find(x=>x.id===id):null;
-  editing={id:id||null,data:b?{...b}:{unitId:preset?.unitId||UNITS[0].id,company:'',contact:'',persons:'',start:preset?.start||TODAY,endOriginal:'',extendedUntil:'',price:'',priceModel:'pp_night',invoicedUntil:'',state:'confirmed',notes:''}};
+  editing={id:id||null,linkInvoice:preset?.linkInvoice||null,data:b?{...b}:{unitId:preset?.unitId||UNITS[0].id,company:'',contact:'',persons:'',start:preset?.start||TODAY,endOriginal:'',extendedUntil:'',price:'',priceModel:'pp_night',invoicedUntil:'',state:'confirmed',notes:'',...(preset?.data||{})}};
   drawDrawer();
+}
+function openOrphan(i){
+  if(!canWrite){toast('Nur mit Bearbeitungsrechten möglich.');return}
+  const nights=i.period_start&&i.period_end?diff(i.period_start,i.period_end)+1:0;
+  const q=i.quantity!=null?+i.quantity:null, n2=nights-1;
+  const n=q&&(Math.abs(q-nights)<0.01||Math.abs(q-n2)<0.01)?q:nights;
+  const price=i.net!=null&&n?Math.round(+i.net/n*100)/100:'';
+  openDrawer(null,{unitId:UNIT[i.unit_id]?i.unit_id:UNITS[0].id,linkInvoice:i.id,
+    data:{company:i.customer||'',start:i.period_start||TODAY,endOriginal:i.period_end||'',invoicedUntil:i.period_end||'',price,priceModel:'unit_night',
+      notes:'Aus Rechnung '+i.number+' neu angelegt'}});
+  toast('Bitte Personen ergänzen und speichern.');
 }
 function closeDrawer(){editing=null;$('#drawer-root').replaceChildren()}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&editing)closeDrawer()});
@@ -703,6 +720,10 @@ async function saveBooking(btn){
     btn.disabled=false;
     if(!error||error.code==='42501'){toast('Du hast für diesen Plan nur Leserechte.');return}
     toast('Speichern hat nicht geklappt: '+error.message);return;
+  }
+  if(!editing.id&&editing.linkInvoice){
+    const {error:le}=await sb.from('invoices').update({booking_id:data[0].id}).eq('id',editing.linkInvoice);
+    if(le)toast('Buchung gespeichert, Rechnung konnte nicht verknüpft werden.');
   }
   closeDrawer();toast('Gespeichert');await loadBookings();
 }
@@ -1161,7 +1182,7 @@ $('#btn-logout').addEventListener('click',async()=>{await sb.auth.signOut()});
 async function loadBookings(){
   const [{data,error},inv]=await Promise.all([
     sb.from('bookings').select('*').order('start_date'),
-    sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,total,booking_id,file_path').order('invoice_date',{ascending:false})]);
+    sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path').order('invoice_date',{ascending:false})]);
   if(error){toast('Buchungen konnten nicht geladen werden.');return}
   invoices=inv.error?[]:inv.data;invoicesReady=!inv.error;
   bookings=data.map(fromRow);loaded=true;render();
