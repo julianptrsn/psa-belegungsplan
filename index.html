@@ -337,7 +337,11 @@ const UNITS=[];BUILDINGS.forEach(b=>b.units.forEach(([id,label,cap])=>UNITS.push
 const UNIT=Object.fromEntries(UNITS.map(u=>[u.id,u]));
 let ownerSel='all';
 try{const o=localStorage.getItem('mafl-owner');if(o==='all'||OWNERS.includes(o))ownerSel=o}catch(e){}
-const inScope=unitId=>ownerSel==='all'||UNIT[unitId]?.owner===ownerSel;
+// Welche Eigentümer dieser Nutzer sehen darf (aus members.owners; die Datenbank setzt das zusätzlich durch)
+let myOwners=OWNERS.slice();
+const allowedOwner=o=>myOwners.includes(o);
+const allowedBuildings=()=>BUILDINGS.filter(b=>allowedOwner(b.owner));
+const inScope=unitId=>{const o=UNIT[unitId]?.owner;return !!o&&allowedOwner(o)&&(ownerSel==='all'||o===ownerSel)};
 const SB=()=>bookings.filter(b=>inScope(b.unitId));
 const SU=()=>UNITS.filter(u=>inScope(u.id));
 const TOTAL_BEDS_ALL=UNITS.reduce((s,u)=>s+u.cap,0);
@@ -529,8 +533,8 @@ function renderTimeline(){
   const ob=overbooked(bookings);const overIds=new Set(Object.values(ob).flatMap(o=>o.ids));
   const out=[head];
   const cs=getComputedStyle(tl);const dayPx=()=>parseFloat(cs.getPropertyValue('--day'))||30;
-  for(const bld of BUILDINGS.filter(b=>ownerSel==='all'||b.owner===ownerSel)){
-    out.push(el('div',{class:'tl-group'},el('div',{class:'tl-lab',title:bld.owner},bld.name,ownerSel==='all'&&bld.owner!=='PSA Immobilien'?el('span',{class:'owner-tag',text:'· TS'}):null),el('div',{class:'fill'})));
+  for(const bld of allowedBuildings().filter(b=>ownerSel==='all'||b.owner===ownerSel)){
+    out.push(el('div',{class:'tl-group'},el('div',{class:'tl-lab',title:bld.owner},bld.name,ownerSel==='all'&&myOwners.length>1&&bld.owner!=='PSA Immobilien'?el('span',{class:'owner-tag',text:'· TS'}):null),el('div',{class:'fill'})));
     for(const[uid,label,cap]of bld.units){
       const bs=bookings.filter(b=>b.unitId===uid&&b.start<to&&endOf(b)>from).sort((a,c)=>a.start<c.start?-1:1);
       const lanes=[];bs.forEach(b=>{let i=lanes.findIndex(e=>e<=b.start);if(i<0){i=lanes.length;lanes.push('')}lanes[i]=endOf(b);b._lane=i});
@@ -596,7 +600,7 @@ function renderList(){
 let editing=null;
 function openDrawer(id,preset){
   const b=id?bookings.find(x=>x.id===id):null;
-  editing={id:id||null,linkInvoice:preset?.linkInvoice||null,data:b?{...b}:{unitId:preset?.unitId||UNITS[0].id,company:'',contact:'',persons:'',start:preset?.start||TODAY,endOriginal:'',extendedUntil:'',price:'',priceModel:'pp_night',invoicedUntil:'',state:'confirmed',notes:'',...(preset?.data||{})}};
+  editing={id:id||null,linkInvoice:preset?.linkInvoice||null,data:b?{...b}:{unitId:preset?.unitId||(UNITS.find(u=>allowedOwner(u.owner))||UNITS[0]).id,company:'',contact:'',persons:'',start:preset?.start||TODAY,endOriginal:'',extendedUntil:'',price:'',priceModel:'pp_night',invoicedUntil:'',state:'confirmed',notes:'',...(preset?.data||{})}};
   drawDrawer();
 }
 function openOrphan(i){
@@ -617,7 +621,7 @@ async function drawDrawer(){
   const d=editing.data, ro=!canWrite, isNew=!editing.id;
   const f=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
   const inp=(id,key,type='text',extra={})=>{const i=el('input',{id,type,value:d[key]??'',...extra});i.disabled=ro;i.addEventListener('input',()=>{d[key]=type==='number'?(i.value===''?'':+i.value):i.value;updateCalc()});return i};
-  const unitSel=el('select',{id:'f-unit'},BUILDINGS.map(bld=>el('optgroup',{label:bld.name},bld.units.map(([uid,label,cap])=>el('option',{value:uid,text:label+' ('+cap+' Betten)'})))));
+  const unitSel=el('select',{id:'f-unit'},allowedBuildings().map(bld=>el('optgroup',{label:bld.name},bld.units.map(([uid,label,cap])=>el('option',{value:uid,text:label+' ('+cap+' Betten)'})))));
   unitSel.value=d.unitId;unitSel.disabled=ro;unitSel.addEventListener('change',()=>{d.unitId=unitSel.value;updateCalc()});
   const modelSel=el('select',{id:'f-model'},Object.entries(PRICE_MODELS).map(([k,v])=>el('option',{value:k,text:v})));
   modelSel.value=d.priceModel||'pp_night';modelSel.disabled=ro;modelSel.addEventListener('change',()=>{d.priceModel=modelSel.value;updateCalc()});
@@ -743,7 +747,13 @@ function exportCsv(){
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
 }
 /* ===== Events ===== */
-$('#owner-sel').value=ownerSel;
+function applyOwnerSelect(){
+  const sel=$('#owner-sel');
+  if(ownerSel!=='all'&&!allowedOwner(ownerSel))ownerSel='all';
+  sel.replaceChildren(el('option',{value:'all',text:'Alle Wohnungen'}),...myOwners.map(o=>el('option',{value:o,text:o})));
+  sel.hidden=myOwners.length<2;sel.value=ownerSel;
+}
+applyOwnerSelect();
 $('#owner-sel').addEventListener('change',e=>{ownerSel=e.target.value;try{localStorage.setItem('mafl-owner',ownerSel)}catch(_){}render()});
 function save(){try{localStorage.setItem('mafl-view',view)}catch(e){}}
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;save();render()}));
@@ -949,7 +959,8 @@ async function nextInvoice(){
 function drawInvoiceReview(file,p){
   const total=invQueue.length, n=invPos+1;
   const ok=p&&p.number&&p.periodStart;
-  const unitId=ok?matchUnit(p.location):null;
+  const mu=ok?matchUnit(p.location):null;
+  const unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
   const pr=ok?priceFromInvoice(p,unitId):{};
   const st={unitId:unitId||'',company:ok?p.customer:'',target:'',persons:pr.persons??'',price:pr.price??'',priceModel:pr.priceModel||'unit_night',extend:true,start:ok?p.periodStart:''};
   const dup=ok?invoices.find(i=>i.number===p.number):null;
@@ -971,7 +982,7 @@ function drawInvoiceReview(file,p){
       ...(p.invPersons?[el('dt',{text:'Personen'}),el('dd',{text:p.invPersons+' am '+fmt(p.periodEnd)+((p.groups||[]).length>1?' (zusammen)':'')})]:[]),
       el('dt',{text:'Netto / USt.'}),el('dd',{class:'num',text:(p.net!=null?eur2(p.net):'—')+' / '+(p.vat!=null?eur2(p.vat):'—')+(p.vatRate!=null?' ('+p.vatRate+' %)':'')})));
 
-  const unitSel=el('select',{id:'iv-unit'},el('option',{value:'',text:'Bitte wählen …'}),BUILDINGS.map(bld=>el('optgroup',{label:bld.name},bld.units.map(([uid,label,cap])=>el('option',{value:uid,text:label+' ('+cap+' Betten)'})))));
+  const unitSel=el('select',{id:'iv-unit'},el('option',{value:'',text:'Bitte wählen …'}),allowedBuildings().map(bld=>el('optgroup',{label:bld.name},bld.units.map(([uid,label,cap])=>el('option',{value:uid,text:label+' ('+cap+' Betten)'})))));
   unitSel.value=st.unitId;
   const unitHint=el('div',{class:'hint'+(st.unitId?'':' bad'),text:st.unitId?'Erkannt aus „'+p.location+'“':'„'+(p.location||'?')+'“ konnte keiner Wohnung zugeordnet werden.'});
   const coInp=el('input',{id:'iv-co',type:'text',list:'companies',value:st.company,autocomplete:'off'});
@@ -1194,10 +1205,13 @@ async function startApp(session){
   if(started===session.user.id)return;
   started=session.user.id;myId=session.user.id;
   $('#auth').hidden=true;$('#app').hidden=false;
-  const {data:mem}=await sb.from('members').select('user_id,name,can_edit');
+  let {data:mem,error:memErr}=await sb.from('members').select('user_id,name,can_edit,owners');
+  if(memErr)({data:mem}=await sb.from('members').select('user_id,name,can_edit'));
   memberNames=Object.fromEntries((mem||[]).map(m=>[m.user_id,m.name||'']));
   const me=(mem||[]).find(m=>m.user_id===myId);
   isMember=!!me;canWrite=!!me?.can_edit;writeKnown=true;
+  myOwners=Array.isArray(me?.owners)?OWNERS.filter(o=>me.owners.includes(o)):OWNERS.slice();
+  applyOwnerSelect();
   $('#user-name').textContent=me?.name||session.user.email;
   render();
   await loadBookings();
