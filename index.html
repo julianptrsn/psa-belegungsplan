@@ -69,7 +69,9 @@ header.top .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;pa
 .brand svg{flex:none}
 .brand h1{margin:0;font-size:19px;font-weight:750;font-stretch:112%;letter-spacing:-.01em;text-wrap:balance}
 .brand small{display:block;font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.02em}
-.tabs{display:flex;gap:4px;background:var(--sunk);padding:3px;border-radius:999px;margin-left:auto}
+.owner-sel{padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);font-weight:600;font-size:14px;margin-left:auto}
+.owner-tag{font-weight:500;color:var(--muted);font-size:11px;margin-left:6px}
+.tabs{display:flex;gap:4px;background:var(--sunk);padding:3px;border-radius:999px}
 .tabs button{border:0;background:transparent;padding:6px 14px;border-radius:999px;font-weight:600;font-size:14px;cursor:pointer;color:var(--muted)}
 .tabs button[aria-selected="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgb(0 0 0/.12)}
 .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:var(--r);font-weight:600;font-size:14px;cursor:pointer}
@@ -245,6 +247,7 @@ td .s{font-size:12px;color:var(--muted)}
       <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="var(--accent)"/><path d="M10 18 17 12l7 6M12 17v7h10v-7" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="15.5" y="19" width="3" height="3" rx=".6" fill="var(--today)"/></svg>
       <div><h1>Belegungsplan</h1><small>Monteur Apartments Flensburg · PSA Immobilien</small></div>
     </div>
+    <select id="owner-sel" class="owner-sel" aria-label="Eigentümer"><option value="all">Alle Wohnungen</option><option>PSA Immobilien</option><option>Torben Schmidt</option></select>
     <div class="tabs" role="tablist">
       <button role="tab" id="tab-ov" data-view="ov" aria-selected="true">Übersicht</button>
       <button role="tab" id="tab-tl" data-view="tl" aria-selected="false">Belegungsplan</button>
@@ -326,9 +329,17 @@ const BUILDINGS=[
  {name:'Vogelbeerenweg 58',units:[['vog','Wohnung',4]]},
  {name:'Apenrader Straße 188',units:[['ape-ug','Untergeschoss',5],['ape-eg','Erdgeschoss',6],['ape-og','Obergeschoss',7]]},
 ];
-const UNITS=[];BUILDINGS.forEach(b=>b.units.forEach(([id,label,cap])=>UNITS.push({id,label,cap,addr:b.name})));
+const OWNERS=['PSA Immobilien','Torben Schmidt'];
+const TS_BUILDINGS=['Sandbergweg 28','Vogelbeerenweg 58','Apenrader Straße 188'];
+BUILDINGS.forEach(b=>b.owner=TS_BUILDINGS.includes(b.name)?'Torben Schmidt':'PSA Immobilien');
+const UNITS=[];BUILDINGS.forEach(b=>b.units.forEach(([id,label,cap])=>UNITS.push({id,label,cap,addr:b.name,owner:b.owner})));
 const UNIT=Object.fromEntries(UNITS.map(u=>[u.id,u]));
-const TOTAL_BEDS=UNITS.reduce((s,u)=>s+u.cap,0);
+let ownerSel='all';
+try{const o=localStorage.getItem('mafl-owner');if(o==='all'||OWNERS.includes(o))ownerSel=o}catch(e){}
+const inScope=unitId=>ownerSel==='all'||UNIT[unitId]?.owner===ownerSel;
+const SB=()=>bookings.filter(b=>inScope(b.unitId));
+const SU=()=>UNITS.filter(u=>inScope(u.id));
+const TOTAL_BEDS_ALL=UNITS.reduce((s,u)=>s+u.cap,0);
 const PRICE_MODELS={pp_night:'€ pro Person / Nacht',unit_night:'€ pro Wohnung / Nacht',pp_month:'€ pro Person / Monat',unit_month:'€ pro Wohnung / Monat'};
 const PRICE_SHORT={pp_night:'/P/Nacht',unit_night:'/Whg/Nacht',pp_month:'/P/Monat',unit_month:'/Whg/Monat'};
 
@@ -373,7 +384,7 @@ function monthRevenue(from,to){
   let net=0,gross=0,est=0;
   const covered={}; // booking_id -> abgedeckte Nächte im Zeitraum
   for(const i of invoices){
-    if(!i.period_start||!i.period_end)continue;
+    if(!i.period_start||!i.period_end||!inScope(i.unit_id))continue;
     const nights=diff(i.period_start,i.period_end)+1;
     const ov=Math.max(0,diff(maxD(i.period_start,from),minD(addDays(i.period_end,1),to)));
     if(!ov||nights<=0)continue;
@@ -383,7 +394,7 @@ function monthRevenue(from,to){
     if(i.total!=null)gross+=+i.total*share;
     if(i.booking_id)covered[i.booking_id]=(covered[i.booking_id]||0)+ov;
   }
-  for(const b of bookings){
+  for(const b of SB()){
     if(b.state==='reserved')continue;
     const open=Math.max(0,nightsIn(b,from,to)-(covered[b.id]||0));
     est+=open*perNight(b);
@@ -442,19 +453,20 @@ function renderStatus(){
 }
 
 function renderKpis(){
-  const now=bookings.filter(b=>phase(b)==='now');
+  const scopeBeds=SU().reduce((s,u)=>s+u.cap,0);
+  const now=SB().filter(b=>phase(b)==='now');
   const beds=now.reduce((s,b)=>s+(+b.persons||0),0);
   const units=new Set(now.map(b=>b.unitId)).size;
-  const open=bookings.reduce((s,b)=>s+billing(b).amount,0);
-  const openN=bookings.filter(b=>billing(b).days>0).length;
+  const open=SB().reduce((s,b)=>s+billing(b).amount,0);
+  const openN=SB().filter(b=>billing(b).days>0).length;
   const mFrom=TODAY.slice(0,7)+'-01', mTo=addMonths(mFrom,1);
   const rev=monthRevenue(mFrom,mTo);
-  const pct=Math.round(beds/TOTAL_BEDS*100);
+  const pct=Math.round(beds/scopeBeds*100);
   const k=(lbl,val,sub,meter)=>el('div',{class:'kpi'},el('div',{class:'lbl',text:lbl}),val,el('div',{class:'sub',text:sub}),meter||null);
   const v=(a,b)=>{const d=el('div',{class:'val'});d.append(a);if(b)d.append(el('small',{text:' '+b}));return d};
   $('#kpis').replaceChildren(
-    k('Betten belegt heute',v(String(beds),'/ '+TOTAL_BEDS),pct+' % Auslastung',el('div',{class:'meter'},el('i',{style:'width:'+Math.min(100,pct)+'%'}))),
-    k('Wohnungen belegt',v(String(units),'/ '+UNITS.length),(UNITS.length-units)+' komplett frei'),
+    k('Betten belegt heute',v(String(beds),'/ '+scopeBeds),pct+' % Auslastung',el('div',{class:'meter'},el('i',{style:'width:'+Math.min(100,pct)+'%'}))),
+    k('Wohnungen belegt',v(String(units),'/ '+SU().length),(SU().length-units)+' komplett frei'),
     k('Noch nicht abgerechnet',v(eur(open)),openN?openN+' Buchung'+(openN>1?'en':'')+' mit offenen Nächten':'alles abgerechnet'),
     k('Umsatz '+new Date(toT(mFrom)).toLocaleDateString('de-DE',{month:'long',timeZone:'UTC'})+' (netto)',v(eur(rev.net+rev.est)),
       !rev.est&&!rev.net?'noch keine Buchungen':
@@ -470,31 +482,32 @@ function rowItem(b,right){
     el('div',{class:'r'},right));
 }
 function renderOverview(){
-  const due=bookings.map(b=>({b,bl:billing(b)})).filter(x=>x.bl.days>0).sort((a,c)=>c.bl.days-a.bl.days);
+  const scopeBeds=SU().reduce((s,u)=>s+u.cap,0);
+  const due=SB().map(b=>({b,bl:billing(b)})).filter(x=>x.bl.days>0).sort((a,c)=>c.bl.days-a.bl.days);
   $('#ov-due').replaceChildren(...(due.length?due.map(({b,bl})=>rowItem(b,el('div',{},
       el('span',{class:'pill '+(bl.days>=30||phase(b)==='past'?'bad':'warn'),text:bl.days+' Nächte · '+eur(bl.amount)}),
       el('div',{class:'s',style:'font-size:12px;color:var(--muted);margin-top:3px',text:'abgerechnet bis '+fmt(b.invoicedUntil)})))):
-    [el('li',{class:'empty',style:'cursor:default',text:loaded&&bookings.length?'Alle abgelaufenen Nächte sind abgerechnet.':'Noch keine Buchungen eingetragen.'})]));
+    [el('li',{class:'empty',style:'cursor:default',text:loaded&&SB().length?'Alle abgelaufenen Nächte sind abgerechnet.':'Noch keine Buchungen eingetragen.'})]));
 
   const in21=addDays(TODAY,21);
-  const ends=bookings.filter(b=>phase(b)!=='past'&&endOf(b)!==FAR&&endOf(b)<=in21).sort((a,c)=>endOf(a)<endOf(c)?-1:1);
+  const ends=SB().filter(b=>phase(b)!=='past'&&endOf(b)!==FAR&&endOf(b)<=in21).sort((a,c)=>endOf(a)<endOf(c)?-1:1);
   $('#ov-end').replaceChildren(...(ends.length?ends.map(b=>rowItem(b,el('span',{class:'pill info',text:'Abreise '+fmt(lastDay(b))+(lastDay(b)===TODAY?' · heute':' · in '+diff(TODAY,lastDay(b))+' T.')}))):[el('li',{class:'empty',style:'cursor:default',text:'Keine Abreisen in den nächsten drei Wochen.'})]));
 
-  const starts=bookings.filter(b=>b.start>TODAY&&b.start<=in21).sort((a,c)=>a.start<c.start?-1:1);
+  const starts=SB().filter(b=>b.start>TODAY&&b.start<=in21).sort((a,c)=>a.start<c.start?-1:1);
   $('#ov-start').replaceChildren(...(starts.length?starts.map(b=>rowItem(b,el('span',{class:'pill '+(b.state==='reserved'?'neutral':'ok'),text:fmt(b.start)+(b.state==='reserved'?' · reserviert':'')}))):[el('li',{class:'empty',style:'cursor:default',text:'Keine Anreisen in den nächsten drei Wochen.'})]));
 
   let freeBeds=0;
-  const chips=UNITS.map(u=>{const used=bookings.filter(b=>b.unitId===u.id&&phase(b)==='now').reduce((s,b)=>s+(+b.persons||0),0);const free=u.cap-used;if(free<=0)return null;freeBeds+=free;
+  const chips=SU().map(u=>{const used=SB().filter(b=>b.unitId===u.id&&phase(b)==='now').reduce((s,b)=>s+(+b.persons||0),0);const free=u.cap-used;if(free<=0)return null;freeBeds+=free;
     return el('button',{class:'chip',title:'Neue Buchung für diese Wohnung',onclick:()=>canWrite?openDrawer(null,{unitId:u.id,start:TODAY}):(view='tl',save(),render())},unitName(u.id)+' · ',el('b',{text:free+(used?'/'+u.cap:'')}),' frei')}).filter(Boolean);
-  $('#ov-free-sum').textContent=freeBeds+' von '+TOTAL_BEDS;
+  $('#ov-free-sum').textContent=freeBeds+' von '+scopeBeds;
   $('#ov-free').replaceChildren(...(chips.length?chips:[el('span',{class:'empty',style:'padding:0',text:'Heute ist alles belegt.'})]));
 
-  const openEnd=bookings.filter(b=>!lastDay(b)).sort((a,c)=>a.start<c.start?-1:1);
+  const openEnd=SB().filter(b=>!lastDay(b)).sort((a,c)=>a.start<c.start?-1:1);
   $('#ov-open-panel').hidden=!openEnd.length;
   $('#ov-open').replaceChildren(...openEnd.map(b=>rowItem(b,el('span',{class:'pill warn',text:'seit '+fmt(b.start)+' · Ende offen'}))));
-  const ob=overbooked(bookings);const keys=Object.keys(ob);
+  const ob=overbooked(SB());const keys=Object.keys(ob);
   $('#ov-over-panel').hidden=!keys.length;
-  $('#ov-over').replaceChildren(...keys.map(id=>{const o=ob[id];const b=bookings.find(x=>x.id===o.ids[0]);
+  $('#ov-over').replaceChildren(...keys.map(id=>{const o=ob[id];const b=SB().find(x=>x.id===o.ids[0]);
     return el('li',{onclick:()=>b&&openDrawer(b.id)},el('div',{class:'main'},el('div',{class:'t',text:unitName(id)}),el('div',{class:'s',text:'ab '+fmt(o.from)+' · '+o.ids.length+' Buchung(en) gleichzeitig'})),el('span',{class:'pill bad',text:o.peak+' Pers. / '+UNIT[id].cap+' Betten'}))}));
 }
 
@@ -510,8 +523,8 @@ function renderTimeline(){
   const ob=overbooked(bookings);const overIds=new Set(Object.values(ob).flatMap(o=>o.ids));
   const out=[head];
   const cs=getComputedStyle(tl);const dayPx=()=>parseFloat(cs.getPropertyValue('--day'))||30;
-  for(const bld of BUILDINGS){
-    out.push(el('div',{class:'tl-group'},el('div',{class:'tl-lab',text:bld.name}),el('div',{class:'fill'})));
+  for(const bld of BUILDINGS.filter(b=>ownerSel==='all'||b.owner===ownerSel)){
+    out.push(el('div',{class:'tl-group'},el('div',{class:'tl-lab',title:bld.owner},bld.name,ownerSel==='all'&&bld.owner!=='PSA Immobilien'?el('span',{class:'owner-tag',text:'· TS'}):null),el('div',{class:'fill'})));
     for(const[uid,label,cap]of bld.units){
       const bs=bookings.filter(b=>b.unitId===uid&&b.start<to&&endOf(b)>from).sort((a,c)=>a.start<c.start?-1:1);
       const lanes=[];bs.forEach(b=>{let i=lanes.findIndex(e=>e<=b.start);if(i<0){i=lanes.length;lanes.push('')}lanes[i]=endOf(b);b._lane=i});
@@ -551,11 +564,11 @@ function renderTimeline(){
 function renderList(){
   document.querySelectorAll('#ls-seg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.f===lsFilter));
   const q=lsQuery.trim().toLowerCase();
-  let list=bookings.filter(b=>lsFilter==='all'||(lsFilter==='past'?phase(b)==='past':phase(b)!=='past'));
+  let list=SB().filter(b=>lsFilter==='all'||(lsFilter==='past'?phase(b)==='past':phase(b)!=='past'));
   if(q)list=list.filter(b=>(b.company||'').toLowerCase().includes(q)||unitName(b.unitId).toLowerCase().includes(q)||(b.contact||'').toLowerCase().includes(q));
   list.sort((a,c)=>lsFilter==='past'?(endOf(a)<endOf(c)?1:-1):(a.start<c.start?-1:1));
   const body=$('#ls-body');
-  if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'9',class:'empty',text:bookings.length?'Keine Buchungen für diesen Filter.':(canWrite?'Noch keine Buchungen. Lege die erste über „+ Buchung“ an.':'Noch keine Buchungen eingetragen.')})));return}
+  if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'9',class:'empty',text:SB().length?'Keine Buchungen für diesen Filter.':(canWrite?'Noch keine Buchungen. Lege die erste über „+ Buchung“ an.':'Noch keine Buchungen eingetragen.')})));return}
   body.replaceChildren(...list.map(b=>{
     const bl=billing(b),ph=phase(b);
     const status=!lastDay(b)?el('span',{class:'pill warn',text:'Ende offen'}):b.state==='reserved'?el('span',{class:'pill neutral',text:'reserviert'}):ph==='future'?el('span',{class:'pill info',text:'kommend'}):ph==='now'?el('span',{class:'pill ok',text:'läuft'}):el('span',{class:'pill neutral',text:'beendet'});
@@ -701,14 +714,16 @@ async function deleteBooking(){
 
 /* ===== CSV ===== */
 function exportCsv(){
-  const head=['Adresse','Wohnung','Firma','Kontakt','Personen','Status','Anreise','Abreise ursprünglich','Verlängert bis','Preis','Preismodell','Abgerechnet bis','Offene Nächte','Offener Betrag','Notizen'];
+  const head=['Eigentümer','Adresse','Wohnung','Firma','Kontakt','Personen','Status','Anreise','Abreise ursprünglich','Verlängert bis','Preis','Preismodell','Abgerechnet bis','Offene Nächte','Offener Betrag','Notizen'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const rows=bookings.slice().sort((a,c)=>a.start<c.start?-1:1).map(b=>{const bl=billing(b);return[UNIT[b.unitId]?.addr,UNIT[b.unitId]?.label,b.company,b.contact,b.persons,b.state==='reserved'?'reserviert':'bestätigt',fmt(b.start),fmt(b.endOriginal),fmt(b.extendedUntil),b.price===''?'':String(b.price).replace('.',','),PRICE_MODELS[b.priceModel]||'',fmt(b.invoicedUntil),bl.days,bl.amount.toFixed(2).replace('.',','),b.notes].map(q).join(';')});
+  const rows=SB().slice().sort((a,c)=>a.start<c.start?-1:1).map(b=>{const bl=billing(b);return[UNIT[b.unitId]?.owner,UNIT[b.unitId]?.addr,UNIT[b.unitId]?.label,b.company,b.contact,b.persons,b.state==='reserved'?'reserviert':'bestätigt',fmt(b.start),fmt(b.endOriginal),fmt(b.extendedUntil),b.price===''?'':String(b.price).replace('.',','),PRICE_MODELS[b.priceModel]||'',fmt(b.invoicedUntil),bl.days,bl.amount.toFixed(2).replace('.',','),b.notes].map(q).join(';')});
   const blob=new Blob(['﻿'+[head.map(q).join(';'),...rows].join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='belegungsplan-'+TODAY+'.csv';document.body.append(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
 }
 /* ===== Events ===== */
+$('#owner-sel').value=ownerSel;
+$('#owner-sel').addEventListener('change',e=>{ownerSel=e.target.value;try{localStorage.setItem('mafl-owner',ownerSel)}catch(_){}render()});
 function save(){try{localStorage.setItem('mafl-view',view)}catch(e){}}
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;save();render()}));
 $('#btn-new').addEventListener('click',()=>openDrawer(null,view==='tl'?{start:tlMonth===TODAY.slice(0,7)?TODAY:tlMonth+'-01'}:null));
@@ -759,26 +774,32 @@ function parseInvoice(items,width){
   dateFixes=[];
   out.date=deDate(val('Rechnungsdatum'));
   out.due=deDate(val('Fälligkeitsdatum'));
-  // Kunde: linke Spalte zwischen Absenderzeile und Überschrift "Rechnung"
+  // Linke Spalte oberhalb der Überschrift "Rechnung" in Blöcke aufteilen (nach Zeilenabstand):
+  // erster Block = Absender, letzter Block = Kunde. Funktioniert für beide Vorlagen.
   const iHead=rows.findIndex(r=>/^Rechnung$/i.test(r.text.trim()));
-  const iSender=rows.findIndex(r=>/Gewerbedamm/.test(r.text));
   const leftMax=width*0.45;
-  const left=[];
-  rows.forEach((r,i)=>{if(i<=iSender||(iHead>=0&&i>=iHead))return;const c=r.cells.filter(c=>c.x<leftMax).map(c=>c.text).join(' ');if(c)left.push(c)});
-  out.customer=left[0]||'';out.customerAddr=left.slice(1);
+  const leftRows=[];
+  rows.forEach((r,i)=>{if(iHead>=0&&i>=iHead)return;const t=r.cells.filter(c=>c.x<leftMax).map(c=>c.text).join(' ').trim();if(t)leftRows.push({y:r.y,t})});
+  const blocks=[];
+  leftRows.forEach((r,i)=>{const prev=leftRows[i-1];if(!prev||prev.y-r.y>24)blocks.push([]);blocks[blocks.length-1].push(r.t)});
+  const custBlock=blocks.length>1?blocks[blocks.length-1]:(blocks[0]||[]);
+  out.issuer=blocks.length>1?blocks[0][0]:'';
+  out.customer=custBlock[0]||'';out.customerAddr=custBlock.slice(1);
   // Zeitraum und Objekt direkt unter "Rechnung"
   const after=iHead>=0?rows.slice(iHead+1,iHead+5).map(r=>r.text):rows.map(r=>r.text);
   for(let k=0;k<after.length;k++){
     const m=after[k].match(/(\d{1,2}\.\d{1,2}\.\d{4})\s*[-–]\s*(\d{1,2}\.\d{1,2}\.\d{4})/);
     if(m){out.periodStart=deDate(m[1]);out.periodEnd=deDate(m[2]);
       const loc=after[k].replace(m[0],'').trim()||after[k+1]||'';
-      if(!/^Nr\.?\s/i.test(loc))out.location=loc.trim();break}
+      if(!/^(Nr\.?|Beschreibung)\s/i.test(loc))out.location=loc.trim();break}
   }
-  // Positionszeile: "1  Übernachtungen  30,00  102,00 €  7,00 %  3.274,20 €"
-  const pos=rows.find(r=>/^\d+$/.test(r.cells[0]?.text||'')&&r.cells.length>=5&&/€/.test(r.text));
-  if(pos){const c=pos.cells.map(c=>c.text);
-    out.description=c[1]||'';out.quantity=deNum(c[2]);out.unitPrice=deNum(c[3]);
-    const vr=c.find(t=>/%/.test(t));out.vatRate=vr?deNum(vr):null;}
+  // Positionszeile: Zeile mit "x,xx %" unter dem Tabellenkopf, z. B.
+  // "1  Übernachtungen  30,00  102,00 €  7,00 %  3.274,20 €"  oder  "Übernachtungen  14,00  126,00 €  7,00 %  1.887,48 €"
+  const iTab=rows.findIndex(r=>/Einzelpreis/i.test(r.text));
+  const pos=rows.slice(iTab+1).find(r=>!/Nettobetrag|Gesamtsumme|^USt/i.test(r.text)&&r.cells.some(c=>/%/.test(c.text))&&/€/.test(r.text));
+  if(pos){const c=pos.cells.map(c=>c.text);const vi=c.findIndex(t=>/%/.test(t));
+    out.vatRate=deNum(c[vi]);out.unitPrice=deNum(c[vi-1]);out.quantity=deNum(c[vi-2]);
+    out.description=c.slice(0,Math.max(0,vi-2)).filter(t=>!/^\d+$/.test(t)).join(' ');}
   const iPos=pos?rows.indexOf(pos):0;
   const sum=re=>{const r=rows.slice(iPos+1).find(r=>re.test(r.cells.find(c=>c.x>width*0.45)?.text||''));return r&&/€/.test(r.text)?deNum(r.cells[r.cells.length-1].text):null};
   out.fixes=dateFixes.slice();
@@ -822,6 +843,7 @@ function matchUnit(location){
   const cand=bld.units.filter(([id,label])=>{const k=floorKey(label);const k2=k.replace('rechts','r').replace('links','l');return k===rest||k2===rest||(rest.length>=2&&(k.startsWith(rest)||rest.startsWith(k)))});
   return cand.length===1?cand[0][0]:(bld.units.length===1?bld.units[0][0]:null);
 }
+const sameOwner=(issuer,owner)=>{const a=String(issuer||'').toLowerCase();return owner==='Torben Schmidt'?/torben|schmidt/.test(a):/psa/.test(a)};
 const normCo=s=>String(s||'').toLowerCase().replace(/\b(gmbh|co|kg|ag|ug|mbh|e\.?k|ohg|gbr|haftungsbeschränkt)\b/g,'').replace(/[^a-z0-9äöüß]/g,'');
 const sameCo=(a,b)=>{const x=normCo(a),y=normCo(b);return !!x&&!!y&&(x===y||x.includes(y)||y.includes(x))};
 function bookingCandidates(unitId,company,pStart,pEnd){
@@ -831,18 +853,30 @@ function bookingCandidates(unitId,company,pStart,pEnd){
     return{b,score};
   }).sort((a,c)=>c.score-a.score||(a.b.start<c.b.start?1:-1));
 }
+// Abgerechnete Nächte: je nach Rechnung "06.–20.09. = 14" oder "01.–30.11. = 30".
+// Wir nehmen die Zählweise, zu der die Menge passt.
+function invoiceNights(p){
+  if(!p.periodStart||!p.periodEnd)return[];
+  const d=diff(p.periodStart,p.periodEnd);return[d+1,d].filter(n=>n>0);
+}
+function invoiceSplit(p,cap){
+  const q=p.quantity;if(!q)return null;
+  for(const n of invoiceNights(p)){if(Math.abs(q-n)<0.01)return{nights:n,persons:1}}
+  for(const n of invoiceNights(p)){const k=q/n;if(Math.abs(k-Math.round(k))<0.001&&k>=2&&(!cap||k<=cap))return{nights:n,persons:Math.round(k)}}
+  return null;
+}
 function invoiceNightly(p){
-  const nights=p.periodStart&&p.periodEnd?diff(p.periodStart,p.periodEnd)+1:0;
-  if(!nights)return null;
   const net=p.net!=null?p.net:(p.quantity!=null&&p.unitPrice!=null?p.quantity*p.unitPrice:null);
-  return net!=null?Math.round(net/nights*100)/100:null;
+  if(net==null)return null;
+  const sp=invoiceSplit(p,0);
+  const n=sp?sp.nights:invoiceNights(p)[0];
+  return n?Math.round(net/n*100)/100:null;
 }
 function priceFromInvoice(p,unitId){
-  const nights=p.periodStart&&p.periodEnd?diff(p.periodStart,p.periodEnd)+1:0;
-  const q=p.quantity,cap=UNIT[unitId]?.cap||0;
-  if(nights&&q&&Math.abs(q-nights)<0.01)return{priceModel:'unit_night',price:p.unitPrice,persons:''};
-  if(nights&&q&&q%nights===0&&q/nights>=2&&(!cap||q/nights<=cap))return{priceModel:'pp_night',price:p.unitPrice,persons:q/nights};
-  if(q===1)return{priceModel:'unit_month',price:p.unitPrice,persons:''};
+  const sp=invoiceSplit(p,UNIT[unitId]?.cap||0);
+  if(sp&&sp.persons===1)return{priceModel:'unit_night',price:p.unitPrice,persons:''};
+  if(sp)return{priceModel:'pp_night',price:p.unitPrice,persons:sp.persons};
+  if(p.quantity===1)return{priceModel:'unit_month',price:p.unitPrice,persons:''};
   return{priceModel:'unit_night',price:p.unitPrice,persons:''};
 }
 
@@ -963,6 +997,7 @@ function drawInvoiceReview(file,p){
 
   const body=el('div',{class:'body'},summary,
     dup?el('div',{class:'warnbox',text:'Rechnung '+p.number+' ist schon erfasst'+(dup.booking_id&&bookings.find(b=>b.id===dup.booking_id)?' (bei '+(bookings.find(b=>b.id===dup.booking_id).company)+')':'')+'.'}):null,
+    (p.issuer&&st.unitId&&!sameOwner(p.issuer,UNIT[st.unitId].owner))?el('div',{class:'warnbox',text:'Rechnungssteller „'+p.issuer+'“, die Wohnung gehört aber zu '+UNIT[st.unitId].owner+'. Bitte Wohnung prüfen.'}):null,
     (p.fixes&&p.fixes.length)?el('div',{class:'warnbox',text:p.fixes.map(x=>'Auf der Rechnung steht '+x.raw+', das Datum gibt es nicht. Übernommen wird '+x.fixed+'.').join(' ')+' Bitte prüfen und bei Bedarf unten anpassen.'}):null,
     el('div',{class:'two'},f('iv-ps','Leistung von',psInp),f('iv-pe','Leistung bis (einschl.)',peInp)),
     periodHint,
