@@ -348,7 +348,11 @@ const eur2=n=>n.toLocaleString('de-DE',{style:'currency',currency:'EUR',minimumF
 const FAR='9999-12-31';
 
 /* ===== Berechnungen ===== */
-const endOf=b=>b.extendedUntil||b.endOriginal||FAR;
+// Abreise/Verlängert bis = letzter belegter Tag (einschließlich), wie auf den Rechnungen.
+// endOf() liefert intern den Tag danach, damit Nächte = diff(Anreise, endOf).
+const lastDay=b=>b.extendedUntil||b.endOriginal||'';
+const endOf=b=>{const e=lastDay(b);return e?addDays(e,1):FAR};
+const endTxt=b=>lastDay(b)?fmt(lastDay(b)):'offen';
 const perNight=b=>{const p=+b.price||0,n=+b.persons||0;switch(b.priceModel){case'pp_night':return p*n;case'unit_night':return p;case'pp_month':return p*n/30;case'unit_month':return p/30;default:return 0}};
 function phase(b){const e=endOf(b);if(b.start>TODAY)return'future';if(e<=TODAY)return'past';return'now'}
 const perPersonNight=b=>{const n=+b.persons||0;return n?perNight(b)/n:0};
@@ -473,7 +477,7 @@ function renderOverview(){
 
   const in21=addDays(TODAY,21);
   const ends=bookings.filter(b=>phase(b)!=='past'&&endOf(b)!==FAR&&endOf(b)<=in21).sort((a,c)=>endOf(a)<endOf(c)?-1:1);
-  $('#ov-end').replaceChildren(...(ends.length?ends.map(b=>rowItem(b,el('span',{class:'pill info',text:'Abreise '+fmt(endOf(b))+' · in '+diff(TODAY,endOf(b))+' T.'}))):[el('li',{class:'empty',style:'cursor:default',text:'Keine Abreisen in den nächsten drei Wochen.'})]));
+  $('#ov-end').replaceChildren(...(ends.length?ends.map(b=>rowItem(b,el('span',{class:'pill info',text:'Abreise '+fmt(lastDay(b))+(lastDay(b)===TODAY?' · heute':' · in '+diff(TODAY,lastDay(b))+' T.')}))):[el('li',{class:'empty',style:'cursor:default',text:'Keine Abreisen in den nächsten drei Wochen.'})]));
 
   const starts=bookings.filter(b=>b.start>TODAY&&b.start<=in21).sort((a,c)=>a.start<c.start?-1:1);
   $('#ov-start').replaceChildren(...(starts.length?starts.map(b=>rowItem(b,el('span',{class:'pill '+(b.state==='reserved'?'neutral':'ok'),text:fmt(b.start)+(b.state==='reserved'?' · reserviert':'')}))):[el('li',{class:'empty',style:'cursor:default',text:'Keine Anreisen in den nächsten drei Wochen.'})]));
@@ -519,7 +523,7 @@ function renderTimeline(){
         const bl=billing(b);
         const bar=el('button',{class:'bar'+(b.state==='reserved'?' res':'')+(overIds.has(b.id)?' over':'')+(b.start<from?' cl-l':'')+(endOf(b)>to?' cl-r':''),
           style:'left:calc('+x+' * var(--day) + 2px);width:calc('+w+' * var(--day) - 4px);top:'+(4+b._lane*28)+'px',
-          title:(b.company||'')+' · '+(b.persons||0)+' Pers. · '+fmt(b.start)+' – '+(endOf(b)===FAR?'offen':fmt(endOf(b))),
+          title:(b.company||'')+' · '+(b.persons||0)+' Pers. · '+fmt(b.start)+' – '+endTxt(b),
           onclick:()=>openDrawer(b.id)},(b.company||'Ohne Firma')+' · '+(b.persons||0)+'P');
         // Abrechnungsstreifen: grün bis "abgerechnet bis", orange bis heute
         const span=e===s?1:diff(s,e);
@@ -529,7 +533,7 @@ function renderTimeline(){
           const g=pct(billedEnd);if(g>0)bar.append(el('span',{class:'inv ok',style:'width:'+g+'%'}));
           const dueTo=minD(TODAY,endOf(b));const o=pct(dueTo);if(o>g)bar.append(el('span',{class:'inv due',style:'left:'+g+'%;width:'+(o-g)+'%'}));
         }
-        if(b.extendedUntil&&b.endOriginal&&b.endOriginal>s&&b.endOriginal<e)bar.append(el('span',{class:'ext',title:'ursprüngliche Abreise '+fmt(b.endOriginal),style:'left:'+pct(b.endOriginal)+'%'}));
+        if(b.extendedUntil&&b.endOriginal&&addDays(b.endOriginal,1)>s&&addDays(b.endOriginal,1)<e)bar.append(el('span',{class:'ext',title:'ursprüngliche Abreise '+fmt(b.endOriginal),style:'left:'+pct(addDays(b.endOriginal,1))+'%'}));
         cells.append(bar);
       }
       out.push(el('div',{class:'tl-row'},
@@ -556,7 +560,7 @@ function renderList(){
       el('td',{},el('div',{text:UNIT[b.unitId]?.addr||'—'}),el('div',{class:'s',text:UNIT[b.unitId]?.label||''})),
       el('td',{},el('div',{text:b.company||'—'}),b.contact?el('div',{class:'s',text:b.contact}):null),
       el('td',{class:'r num',text:String(b.persons||0)}),
-      el('td',{},el('div',{class:'num',text:fmt(b.start)+' – '+(endOf(b)===FAR?'offen':fmt(endOf(b)))}),ext),
+      el('td',{},el('div',{class:'num',text:fmt(b.start)+' – '+endTxt(b)}),ext),
       el('td',{class:'r'},el('div',{class:'num',text:b.price?eur2(+b.price):'—'}),el('div',{class:'s',text:PRICE_SHORT[b.priceModel]||''})),
       el('td',{class:'r num',text:perPersonNight(b)?eur2(perPersonNight(b)):'—'}),
       el('td',{class:'num'},bl.full?el('span',{class:'pill ok',text:'komplett'}):document.createTextNode(fmt(b.invoicedUntil))),
@@ -603,8 +607,8 @@ async function drawDrawer(){
     persHint.className='hint'+(u&&p>u.cap?' bad':'');
     persHint.textContent=u?(p>u.cap?'Mehr Personen als Betten ('+u.cap+')!':u.cap+' Betten in dieser Wohnung'):'';
     const e=endOf(d);
-    endHint.textContent=d.endOriginal&&d.start&&d.endOriginal<=d.start?'Abreise muss nach der Anreise liegen.':(e!==FAR&&d.start?diff(d.start,e)+' Nächte'+(d.extendedUntil?' inkl. Verlängerung':''):'Leer lassen, wenn das Ende noch offen ist.');
-    endHint.className='hint'+(d.endOriginal&&d.endOriginal<=d.start?' bad':'');
+    endHint.textContent=d.endOriginal&&d.start&&d.endOriginal<d.start?'Die Abreise darf nicht vor der Anreise liegen.':(e!==FAR&&d.start?diff(d.start,e)+' Nächte'+(d.extendedUntil?' inkl. Verlängerung':''):'Leer lassen, wenn das Ende noch offen ist.');
+    endHint.className='hint'+(d.endOriginal&&d.endOriginal<d.start?' bad':'');
     const pn=perNight(d),tv=totalValue(d),bl=d.start?billing(d):{days:0,amount:0};
     // Konflikte mit anderen Buchungen derselben Wohnung
     const others=bookings.filter(b=>b.id!==editing.id);
@@ -637,8 +641,8 @@ async function drawDrawer(){
       f('f-company','Firma',inp('f-company','company','text',{list:'companies',placeholder:'z. B. Elektro Hansen GmbH',autocomplete:'off'})),
       f('f-contact','Ansprechpartner / Telefon',inp('f-contact','contact','text',{placeholder:'Name, Telefon oder E-Mail'})),
       el('div',{class:'two'},f('f-persons','Personen',inp('f-persons','persons','number',{min:'1',step:'1',inputmode:'numeric'}),persHint),f('f-state','Status',stateSel)),
-      el('div',{class:'two'},f('f-start','Anreise',inp('f-start','start','date')),f('f-end','Abreise (ursprünglich)',inp('f-end','endOriginal','date'))),
-      f('f-ext','Verlängert bis',inp('f-ext','extendedUntil','date'),endHint),
+      el('div',{class:'two'},f('f-start','Anreise',inp('f-start','start','date')),f('f-end','Abreise (letzter Tag)',inp('f-end','endOriginal','date'))),
+      f('f-ext','Verlängert bis (letzter Tag)',inp('f-ext','extendedUntil','date'),endHint),
       el('div',{class:'two'},f('f-price','Preis',inp('f-price','price','number',{min:'0',step:'0.5',inputmode:'decimal',placeholder:'z. B. 25'})),f('f-model','Preis gilt',modelSel)),
       f('f-inv','Rechnung geschrieben bis (einschließlich)',invInput,quick),
       calc,
@@ -660,8 +664,8 @@ function validate(d){
   if(!d.company||!d.company.trim())return'Bitte die Firma eintragen.';
   if(!(+d.persons>0))return'Bitte die Anzahl Personen eintragen.';
   if(!d.start)return'Bitte das Anreisedatum eintragen.';
-  if(d.endOriginal&&d.endOriginal<=d.start)return'Die Abreise muss nach der Anreise liegen.';
-  if(d.extendedUntil&&d.extendedUntil<=d.start)return'„Verlängert bis“ muss nach der Anreise liegen.';
+  if(d.endOriginal&&d.endOriginal<d.start)return'Die Abreise darf nicht vor der Anreise liegen.';
+  if(d.extendedUntil&&d.extendedUntil<d.start)return'„Verlängert bis“ darf nicht vor der Anreise liegen.';
   return null;
 }
 /* ===== Speichern (Supabase) ===== */
@@ -901,7 +905,7 @@ function drawInvoiceReview(file,p){
 
   function rebuildTargets(keep){
     const cands=st.unitId?bookingCandidates(st.unitId,st.company,p.periodStart,p.periodEnd):[];
-    targetSel.replaceChildren(...cands.map(({b})=>el('option',{value:b.id,text:(b.company||'Ohne Firma')+' · '+fmt(b.start)+' – '+(endOf(b)===FAR?'offen':fmt(endOf(b)))})),el('option',{value:'new',text:'Neue Buchung anlegen'}));
+    targetSel.replaceChildren(...cands.map(({b})=>el('option',{value:b.id,text:(b.company||'Ohne Firma')+' · '+fmt(b.start)+' – '+endTxt(b)})),el('option',{value:'new',text:'Neue Buchung anlegen'}));
     if(keep&&[...targetSel.options].some(o=>o.value===st.target))targetSel.value=st.target;
     else targetSel.value=cands.length&&cands[0].score>=3?cands[0].b.id:'new';
     st.target=targetSel.value;rebuildDetail();
@@ -916,17 +920,17 @@ function drawInvoiceReview(file,p){
       detail.append(
         el('div',{class:'two'},f('iv-pers','Personen',pers,el('div',{class:'hint',text:st.unitId?UNIT[st.unitId].cap+' Betten':''})),f('iv-start','Anreise',start)),
         el('div',{class:'two'},f('iv-price','Preis (netto)',price),f('iv-model','Preis gilt',model)),
-        el('div',{class:'hint',text:'Belegt bis zur Abreise am '+fmt(addDays(p.periodEnd,1))+' (Ende des Rechnungszeitraums). Mit der nächsten Rechnung verlängert sich die Buchung.'}));
+        el('div',{class:'hint',text:'Abreise wird '+fmt(p.periodEnd)+' (Ende des Rechnungszeitraums). Mit der nächsten Rechnung verlängert sich die Buchung.'}));
     }else{
       const b=bookings.find(x=>x.id===st.target);if(!b)return;
       const newInv=b.invoicedUntil&&b.invoicedUntil>p.periodEnd?b.invoicedUntil:p.periodEnd;
       const lines=[el('div',{class:'hint',text:'„Abgerechnet bis“: '+fmt(b.invoicedUntil)+' → '+fmt(newInv)})];
-      const newEnd=addDays(newInv,1);
+      const newEnd=newInv;
       if(endOf(b)===FAR||p.periodEnd>=endOf(b)){
         const cb=el('input',{type:'checkbox',id:'iv-ext'});cb.checked=st.extend;cb.addEventListener('change',()=>st.extend=cb.checked);
         lines.push(el('label',{class:'check',for:'iv-ext'},cb,el('span',{text:endOf(b)===FAR
           ?'Abreise auf '+fmt(newEnd)+' setzen (bisher offen, dadurch „belegt ohne Ende“)'
-          :'Aufenthalt bis '+fmt(newEnd)+' verlängern (bisherige Abreise '+fmt(endOf(b))+')'})));
+          :'Aufenthalt bis '+fmt(newEnd)+' verlängern (bisherige Abreise '+fmt(lastDay(b))+')'})));
       }
       if(b.price===''||b.price==null)lines.push(el('div',{class:'hint',text:'Preis wird aus der Rechnung übernommen: '+eur2(st.price)+' '+PRICE_SHORT[st.priceModel]}));
       else{
@@ -970,15 +974,15 @@ function drawInvoiceReview(file,p){
 async function saveInvoice(file,p,st){
   let bookingId=st.target;
   if(st.target==='new'){
-    const row=toRow({unitId:st.unitId,company:st.company,contact:'',persons:st.persons,start:st.start||p.periodStart,endOriginal:addDays(p.periodEnd,1),extendedUntil:'',price:st.price,priceModel:st.priceModel,invoicedUntil:p.periodEnd,state:'confirmed',notes:''});
+    const row=toRow({unitId:st.unitId,company:st.company,contact:'',persons:st.persons,start:st.start||p.periodStart,endOriginal:p.periodEnd,extendedUntil:'',price:st.price,priceModel:st.priceModel,invoicedUntil:p.periodEnd,state:'confirmed',notes:''});
     const {data,error}=await sb.from('bookings').insert(row).select('id');
     if(error||!data?.length)throw new Error(error?.code==='42501'||!data?.length?'Du hast nur Leserechte.':'Buchung konnte nicht angelegt werden: '+error.message);
     bookingId=data[0].id;
   }else{
     const b=bookings.find(x=>x.id===bookingId);
     const upd={invoiced_until:b.invoicedUntil&&b.invoicedUntil>p.periodEnd?b.invoicedUntil:p.periodEnd};
-    const newEnd=addDays(upd.invoiced_until,1);
-    if(st.extend&&endOf(b)===FAR&&newEnd>b.start)upd.end_original=newEnd;
+    const newEnd=upd.invoiced_until;
+    if(st.extend&&endOf(b)===FAR&&newEnd>=b.start)upd.end_original=newEnd;
     else if(st.extend&&endOf(b)!==FAR&&p.periodEnd>=endOf(b))upd.extended_until=newEnd;
     if(b.price===''||b.price==null){upd.price=st.price===''?null:+st.price;upd.price_model=st.priceModel}
     const {error}=await sb.from('bookings').update(upd).eq('id',bookingId);
