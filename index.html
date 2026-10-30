@@ -916,14 +916,17 @@ function drawInvoiceReview(file,p){
       detail.append(
         el('div',{class:'two'},f('iv-pers','Personen',pers,el('div',{class:'hint',text:st.unitId?UNIT[st.unitId].cap+' Betten':''})),f('iv-start','Anreise',start)),
         el('div',{class:'two'},f('iv-price','Preis (netto)',price),f('iv-model','Preis gilt',model)),
-        el('div',{class:'hint',text:'Abreise bleibt offen. „Abgerechnet bis“ wird auf '+fmt(p.periodEnd)+' gesetzt.'}));
+        el('div',{class:'hint',text:'Belegt bis zur Abreise am '+fmt(addDays(p.periodEnd,1))+' (Ende des Rechnungszeitraums). Mit der nächsten Rechnung verlängert sich die Buchung.'}));
     }else{
       const b=bookings.find(x=>x.id===st.target);if(!b)return;
       const newInv=b.invoicedUntil&&b.invoicedUntil>p.periodEnd?b.invoicedUntil:p.periodEnd;
       const lines=[el('div',{class:'hint',text:'„Abgerechnet bis“: '+fmt(b.invoicedUntil)+' → '+fmt(newInv)})];
-      if(endOf(b)!==FAR&&p.periodEnd>=endOf(b)){
+      const newEnd=addDays(newInv,1);
+      if(endOf(b)===FAR||p.periodEnd>=endOf(b)){
         const cb=el('input',{type:'checkbox',id:'iv-ext'});cb.checked=st.extend;cb.addEventListener('change',()=>st.extend=cb.checked);
-        lines.push(el('label',{class:'check',for:'iv-ext'},cb,el('span',{text:'Aufenthalt bis '+fmt(addDays(p.periodEnd,1))+' verlängern (Rechnung geht über die bisherige Abreise '+fmt(endOf(b))+' hinaus)'})));
+        lines.push(el('label',{class:'check',for:'iv-ext'},cb,el('span',{text:endOf(b)===FAR
+          ?'Abreise auf '+fmt(newEnd)+' setzen (bisher offen, dadurch „belegt ohne Ende“)'
+          :'Aufenthalt bis '+fmt(newEnd)+' verlängern (bisherige Abreise '+fmt(endOf(b))+')'})));
       }
       if(b.price===''||b.price==null)lines.push(el('div',{class:'hint',text:'Preis wird aus der Rechnung übernommen: '+eur2(st.price)+' '+PRICE_SHORT[st.priceModel]}));
       else{
@@ -967,14 +970,16 @@ function drawInvoiceReview(file,p){
 async function saveInvoice(file,p,st){
   let bookingId=st.target;
   if(st.target==='new'){
-    const row=toRow({unitId:st.unitId,company:st.company,contact:'',persons:st.persons,start:st.start||p.periodStart,endOriginal:'',extendedUntil:'',price:st.price,priceModel:st.priceModel,invoicedUntil:p.periodEnd,state:'confirmed',notes:''});
+    const row=toRow({unitId:st.unitId,company:st.company,contact:'',persons:st.persons,start:st.start||p.periodStart,endOriginal:addDays(p.periodEnd,1),extendedUntil:'',price:st.price,priceModel:st.priceModel,invoicedUntil:p.periodEnd,state:'confirmed',notes:''});
     const {data,error}=await sb.from('bookings').insert(row).select('id');
     if(error||!data?.length)throw new Error(error?.code==='42501'||!data?.length?'Du hast nur Leserechte.':'Buchung konnte nicht angelegt werden: '+error.message);
     bookingId=data[0].id;
   }else{
     const b=bookings.find(x=>x.id===bookingId);
     const upd={invoiced_until:b.invoicedUntil&&b.invoicedUntil>p.periodEnd?b.invoicedUntil:p.periodEnd};
-    if(st.extend&&endOf(b)!==FAR&&p.periodEnd>=endOf(b))upd.extended_until=addDays(p.periodEnd,1);
+    const newEnd=addDays(upd.invoiced_until,1);
+    if(st.extend&&endOf(b)===FAR&&newEnd>b.start)upd.end_original=newEnd;
+    else if(st.extend&&endOf(b)!==FAR&&p.periodEnd>=endOf(b))upd.extended_until=newEnd;
     if(b.price===''||b.price==null){upd.price=st.price===''?null:+st.price;upd.price_model=st.priceModel}
     const {error}=await sb.from('bookings').update(upd).eq('id',bookingId);
     if(error)throw new Error('Buchung konnte nicht aktualisiert werden: '+error.message);
