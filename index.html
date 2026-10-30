@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Belegung">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 34'%3E%3Crect width='34' height='34' rx='8' fill='%231d5f6e'/%3E%3Cpath d='M10 18 17 12l7 6M12 17v7h10v-7' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='15.5' y='19' width='3' height='3' rx='.6' fill='%23d7891c'/%3E%3C/svg%3E">
 <title>Belegungsplan MA-FL</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1147,6 +1150,9 @@ document.addEventListener('dragover',e=>{if(canWrite&&hasFiles(e))e.preventDefau
 document.addEventListener('dragleave',()=>{if(--dragDepth<=0&&dz){dz.remove();dz=null;dragDepth=0}});
 document.addEventListener('drop',e=>{if(!hasFiles(e))return;e.preventDefault();dragDepth=0;if(dz){dz.remove();dz=null}if(canWrite&&e.dataTransfer.files.length)startInvoiceImport(e.dataTransfer.files)});
 
+
+/* ===== App-Installation (Startbildschirm) ===== */
+if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
 /* ===== Login & Start ===== */
 // Typ des Links aus der E-Mail merken, bevor Supabase die Adresse aufräumt
