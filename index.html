@@ -155,6 +155,15 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .tl-row .cap{font-family:var(--font-num);font-size:12px;color:var(--muted);white-space:nowrap}
 .tl-row .cap.full{color:var(--accent)}
 .tl-row .cap.over{color:var(--bad);font-weight:600}
+.tl-row .capbox{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none}
+.util{display:flex;align-items:center;gap:5px;font-family:var(--font-num);font-size:11px;color:var(--muted);white-space:nowrap}
+.util i{display:block;width:26px;height:4px;border-radius:2px;background:var(--sunk);overflow:hidden}
+.util i b{display:block;height:100%;background:var(--accent)}
+.tl-group .util{margin-left:auto;font-weight:500}
+.tl-group .tl-lab{display:flex;align-items:center;gap:6px}
+.tl-group .tl-lab>span:first-child{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tl-group .util,.tl-group .owner-tag{flex:none}
+@media (max-width:600px){.util i{display:none}}
 .tl-cells{position:relative;flex:none;width:calc(var(--days) * var(--day))}
 .tl-cells .grid{position:absolute;inset:0;display:flex}
 .tl-cells .grid i{width:var(--day);flex:none;border-right:1px solid var(--line-soft)}
@@ -566,6 +575,18 @@ function renderOverview(){
     return el('li',{onclick:()=>b&&openDrawer(b.id)},el('div',{class:'main'},el('div',{class:'t',text:unitName(id)}),el('div',{class:'s',text:'ab '+fmt(o.from)+' · '+o.ids.length+' Buchung(en) gleichzeitig'})),el('span',{class:'pill bad',text:o.peak+' Pers. / '+UNIT[id].cap+' Betten'}))}));
 }
 
+// Belegte Bettnächte einer Wohnung im Zeitraum [from,to) (nur bestätigte Buchungen)
+// pro Tag gezählt und auf die Bettenzahl begrenzt, damit Wechseltage nicht doppelt zählen
+function bedNights(uid,from,to){
+  const cap=UNIT[uid]?.cap||0, bs=bookings.filter(b=>b.unitId===uid&&b.state!=='reserved'&&b.start<to&&endOf(b)>from);
+  if(!bs.length)return 0;let t=0;
+  for(let d=from;d<to;d=addDays(d,1))t+=Math.min(cap,bs.reduce((s,b)=>s+(b.start<=d&&endOf(b)>d?(+b.persons||0):0),0));
+  return t;
+}
+function utilEl(used,capN,bar){
+  const pct=capN?Math.round(used/capN*100):0;
+  return el('span',{class:'util',title:'Auslastung im Monat: '+used+' von '+capN+' Bettnächten'},bar?el('i',{},el('b',{style:'width:'+Math.min(100,pct)+'%'})):null,pct+' %');
+}
 function renderTimeline(){
   const from=tlMonth+'-01', to=addMonths(from,1), days=diff(from,to);
   $('#tl-month').textContent=new Date(toT(from)).toLocaleDateString('de-DE',{month:'long',year:'numeric',timeZone:'UTC'});
@@ -573,14 +594,15 @@ function renderTimeline(){
   const dayList=[...Array(days)].map((_,i)=>addDays(from,i));
   const isWe=d=>{const w=new Date(toT(d)).getUTCDay();return w===0||w===6};
   const wd=['So','Mo','Di','Mi','Do','Fr','Sa'];
-  const head=el('div',{class:'tl-head'},el('div',{class:'tl-lab',text:'Wohnung · Betten'}),
+  const head=el('div',{class:'tl-head'},el('div',{class:'tl-lab',title:'Betten heute belegt / gesamt · Auslastung im angezeigten Monat',text:'Wohnung · Betten · Monat'}),
     el('div',{class:'tl-days'},dayList.map(d=>el('div',{class:'tl-day'+(isWe(d)?' we':'')+(d===TODAY?' td':'')},el('b',{text:String(+d.slice(8))}),wd[new Date(toT(d)).getUTCDay()]))));
   const ob=overbooked(bookings);const overIds=new Set(Object.values(ob).flatMap(o=>o.ids));
   const chg=changeovers(bookings);const chgIds=new Map();chg.forEach(c=>[...c.leave,...c.arrive].forEach(id=>chgIds.set(id,c)));
   const out=[head];
   const cs=getComputedStyle(tl);const dayPx=()=>parseFloat(cs.getPropertyValue('--day'))||30;
   for(const bld of allowedBuildings().filter(b=>ownerSel==='all'||b.owner===ownerSel)){
-    out.push(el('div',{class:'tl-group'},el('div',{class:'tl-lab',title:bld.owner},bld.name,ownerSel==='all'&&myOwners.length>1&&bld.owner!=='PSA Immobilien'?el('span',{class:'owner-tag',text:'· TS'}):null),el('div',{class:'fill'})));
+    const bUsed=bld.units.reduce((t,[uid])=>t+bedNights(uid,from,to),0), bCap=bld.units.reduce((t,u)=>t+u[2],0)*days;
+    out.push(el('div',{class:'tl-group'},el('div',{class:'tl-lab',title:bld.owner},el('span',{text:bld.name}),ownerSel==='all'&&myOwners.length>1&&bld.owner!=='PSA Immobilien'?el('span',{class:'owner-tag',text:'· TS'}):null,utilEl(bUsed,bCap,false)),el('div',{class:'fill'})));
     for(const[uid,label,cap]of bld.units){
       const bs=bookings.filter(b=>b.unitId===uid&&b.start<to&&endOf(b)>from).sort((a,c)=>a.start<c.start?-1:1);
       const lanes=[];bs.forEach(b=>{let i=lanes.findIndex(e=>e<=b.start);if(i<0){i=lanes.length;lanes.push('')}lanes[i]=endOf(b);b._lane=i});
@@ -612,7 +634,9 @@ function renderTimeline(){
         cells.append(bar);
       }
       out.push(el('div',{class:'tl-row'},
-        el('div',{class:'tl-lab'},el('span',{class:'u',text:label}),el('span',{class:'cap num'+(nowUsed>cap?' over':nowUsed===cap?' full':''),title:'heute belegt / Betten',text:nowUsed+'/'+cap})),cells));
+        el('div',{class:'tl-lab'},el('span',{class:'u',text:label}),el('div',{class:'capbox'},
+          el('span',{class:'cap num'+(nowUsed>cap?' over':nowUsed===cap?' full':''),title:'heute belegt / Betten',text:nowUsed+'/'+cap}),
+          utilEl(bedNights(uid,from,to),cap*days,true))),cells));
     }
   }
   tl.replaceChildren(...out);
