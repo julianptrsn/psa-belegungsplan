@@ -436,13 +436,14 @@ function overbooked(list){
     const bs=list.filter(b=>b.unitId===u.id);
     const ev=[];bs.forEach(b=>{ev.push([b.start,+b.persons||0]);if(occEnd(b)!==FAR)ev.push([occEnd(b),-(+b.persons||0)])});
     ev.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:a[1]-b[1]);
-    let cur=0,open=null;const ranges=[];
+    let cur=0,open=null,rp=0;const ranges=[];
+    const inR=(a,e)=>bs.filter(b=>b.start<e&&occEnd(b)>a).map(b=>b.id);
     for(let i=0;i<ev.length;i++){const[d,v]=ev[i];cur+=v;
       if(ev[i+1]&&ev[i+1][0]===d)continue; // erst nach allen Ereignissen eines Tages bewerten
-      if(cur>u.cap&&!open)open=d;
-      if(cur<=u.cap&&open){ranges.push({from:open,to:d});open=null}
+      if(cur>u.cap){if(!open){open=d;rp=cur}else rp=Math.max(rp,cur)}
+      if(cur<=u.cap&&open){ranges.push({from:open,to:d,peak:rp,ids:inR(open,d)});open=null}
       if(cur>u.cap&&(!res[u.id]||cur>res[u.id].peak)){res[u.id]={peak:cur,from:d,ids:bs.filter(b=>b.start<=d&&occEnd(b)>d).map(b=>b.id)}}}
-    if(open)ranges.push({from:open,to:FAR});
+    if(open)ranges.push({from:open,to:FAR,peak:rp,ids:inR(open,FAR)});
     if(res[u.id])res[u.id].ranges=ranges; // Zeiträume der Überbelegung: [from, to)
   }
   return res;
@@ -569,10 +570,12 @@ function renderOverview(){
       el('div',{class:'main'},el('div',{class:'t',text:unitName(c.unitId)}),el('div',{class:'s',text:'Abreise: '+nm(c.leave)+' · Anreise: '+nm(c.arrive)})),
       el('span',{class:'pill warn',text:fmt(c.day)+(c.day===TODAY?' · heute':' · in '+diff(TODAY,c.day)+' T.')}));
   }));
-  const ob=overbooked(SB());const keys=Object.keys(ob);
-  $('#ov-over-panel').hidden=!keys.length;
-  $('#ov-over').replaceChildren(...keys.map(id=>{const o=ob[id];const b=SB().find(x=>x.id===o.ids[0]);
-    return el('li',{onclick:()=>b&&openDrawer(b.id)},el('div',{class:'main'},el('div',{class:'t',text:unitName(id)}),el('div',{class:'s',text:'ab '+fmt(o.from)+' · '+o.ids.length+' Buchung(en) gleichzeitig'})),el('span',{class:'pill bad',text:o.peak+' Pers. / '+UNIT[id].cap+' Betten'}))}));
+  const ob=overbooked(SB());
+  const curOver=Object.entries(ob).flatMap(([id,o])=>(o.ranges||[]).filter(r=>r.to>TODAY).map(r=>({id,...r}))).sort((a,c)=>a.from<c.from?-1:1);
+  $('#ov-over-panel').hidden=!curOver.length;
+  $('#ov-over').replaceChildren(...curOver.map(r=>{const b=SB().find(x=>x.id===r.ids[0]);
+    const when=(r.from<=TODAY?'seit '+fmt(r.from):'ab '+fmt(r.from))+(r.to===FAR?'':' bis '+fmt(addDays(r.to,-1)));
+    return el('li',{onclick:()=>b&&openDrawer(b.id)},el('div',{class:'main'},el('div',{class:'t',text:unitName(r.id)}),el('div',{class:'s',text:when+' · '+r.ids.length+' Buchung(en) gleichzeitig'})),el('span',{class:'pill bad',text:r.peak+' Pers. / '+UNIT[r.id].cap+' Betten'}))}));
 }
 
 // Belegte Bettnächte einer Wohnung im Zeitraum [from,to) (nur bestätigte Buchungen)
