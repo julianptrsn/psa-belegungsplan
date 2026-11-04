@@ -388,10 +388,13 @@ function totalValue(b){const e=endOf(b);if(e===FAR)return null;return diff(b.sta
 function nightsIn(b,from,to){const s=maxD(b.start,from),e=minD(endOf(b),to);return Math.max(0,diff(s,e))}
 // Umsatz eines Zeitraums [from,to): echte Rechnungsbeträge anteilig nach Leistungszeitraum,
 // geschätzt (Preis × Nächte) nur für Nächte, die noch keine Rechnung abdeckt.
+// Stornos und die von ihnen stornierten Rechnungen heben sich auf und zählen nirgends.
+const cancelledNumbers=()=>new Set(invoices.filter(i=>i.is_storno&&i.cancels).map(i=>i.cancels));
+const activeInvoices=()=>{const c=cancelledNumbers();return invoices.filter(i=>!i.is_storno&&!c.has(i.number))};
 function monthRevenue(from,to){
   let net=0,gross=0,est=0;
   const covered={}; // booking_id -> abgedeckte Nächte im Zeitraum
-  for(const i of invoices){
+  for(const i of activeInvoices()){
     if(!i.period_start||!i.period_end||!inScope(i.unit_id))continue;
     const nights=diff(i.period_start,i.period_end)+1;
     const ov=Math.max(0,diff(maxD(i.period_start,from),minD(addDays(i.period_end,1),to)));
@@ -510,7 +513,7 @@ function renderOverview(){
   $('#ov-free-sum').textContent=freeBeds+' von '+scopeBeds;
   $('#ov-free').replaceChildren(...(chips.length?chips:[el('span',{class:'empty',style:'padding:0',text:'Heute ist alles belegt.'})]));
 
-  const orphans=invoices.filter(i=>inScope(i.unit_id)&&(!i.booking_id||!bookings.find(b=>b.id===i.booking_id)));
+  const orphans=activeInvoices().filter(i=>inScope(i.unit_id)&&(!i.booking_id||!bookings.find(b=>b.id===i.booking_id)));
   $('#ov-orphan-panel').hidden=!orphans.length;
   $('#ov-orphan').replaceChildren(...orphans.map(i=>el('li',{tabindex:'0',onclick:()=>openOrphan(i),onkeydown:e=>{if(e.key==='Enter')openOrphan(i)}},
     el('div',{class:'main'},el('div',{class:'t',text:(i.customer||'Kunde unbekannt')+' · Nr. '+i.number}),el('div',{class:'s',text:(UNIT[i.unit_id]?unitName(i.unit_id):'Wohnung unbekannt')+' · '+fmt(i.period_start)+' – '+fmt(i.period_end)})),
@@ -804,13 +807,15 @@ function parseInvoice(items,width){
   const out={raw:all,number:'',date:'',due:'',customer:'',customerAddr:[],periodStart:'',periodEnd:'',location:'',quantity:null,unitPrice:null,vatRate:null,net:null,vat:null,total:null,description:''};
   const val=label=>{for(const r of rows){const i=r.cells.findIndex(c=>c.text.replace(/:$/,'').toLowerCase()===label.toLowerCase());if(i>=0&&r.cells[i+1])return r.cells[i+1].text}
     const m=all.match(new RegExp(label+':?\\s+(\\S[^\\n]*)','i'));return m?m[1].split(/\s{2,}/)[0]:''};
-  out.number=val('Rechnungsnummer');
+  out.number=val('Stornorechnungsnummer')||val('Rechnungsnummer');
+  out.cancels=val('Stornorechnung für Rechnung');
   dateFixes=[];
-  out.date=deDate(val('Rechnungsdatum'));
+  out.date=deDate(val('Stornorechnungsdatum')||val('Rechnungsdatum'));
   out.due=deDate(val('Fälligkeitsdatum'));
   // Linke Spalte oberhalb der Überschrift "Rechnung" in Blöcke aufteilen (nach Zeilenabstand):
   // erster Block = Absender, letzter Block = Kunde. Funktioniert für beide Vorlagen.
-  const iHead=rows.findIndex(r=>/^Rechnung$/i.test(r.text.trim()));
+  const iHead=rows.findIndex(r=>/^(Storno)?rechnung$/i.test(r.text.trim()));
+  out.isStorno=iHead>=0&&/^Storno/i.test(rows[iHead].text.trim())||!!out.cancels;
   const leftMax=width*0.45;
   const leftRows=[];
   rows.forEach((r,i)=>{if(iHead>=0&&i>=iHead)return;const t=r.cells.filter(c=>c.x<leftMax).map(c=>c.text).join(' ').trim();if(t)leftRows.push({y:r.y,t})});
@@ -864,12 +869,13 @@ function parseInvoice(items,width){
   const iPos=pos?rows.indexOf(pos):0;
   const sum=re=>{const r=rows.slice(iPos+1).find(r=>re.test(r.cells.find(c=>c.x>width*0.45)?.text||''));return r&&/€/.test(r.text)?deNum(r.cells[r.cells.length-1].text):null};
   out.fixes=dateFixes.slice();
-  out.net=sum(/^Nettobetrag/i);out.vat=sum(/^USt\.?\s*\d/i);out.total=sum(/^Gesamtsumme/i);
+  out.net=sum(/^Nettobetrag/i);out.vat=sum(/^USt\.?\s*\d/i);out.total=sum(/^(Gesamtsumme|(Stornorechnung\s+)?Gesamtbetrag)/i);
+  if(out.total!=null&&out.total<0)out.isStorno=true;
   return out;
 }
 
 /* ===== Rechnungen: PDF lesen ===== */
-let invoices=[], invoicesReady=false;
+let invoices=[], invoicesReady=false, stornoReady=false;
 const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 let pdfjsReady=null;
 function loadPdfJs(){
@@ -970,13 +976,14 @@ function drawInvoiceReview(file,p){
   const f=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
   const next=()=>{invPos++;nextInvoice()};
 
-  const head=el('header',{},el('h2',{id:'d-title',text:'Rechnung'+(ok?' '+p.number:'')+(total>1?' · '+n+' von '+total:'')}),el('button',{class:'btn small',onclick:()=>{invQueue=[];closeDrawer()},'aria-label':'Schließen'},'✕'));
+  const head=el('header',{},el('h2',{id:'d-title',text:(ok&&p.isStorno?'Stornorechnung':'Rechnung')+(ok?' '+p.number:'')+(total>1?' · '+n+' von '+total:'')}),el('button',{class:'btn small',onclick:()=>{invQueue=[];closeDrawer()},'aria-label':'Schließen'},'✕'));
   if(!ok){
     $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer',role:'dialog','aria-modal':'true'},head,
       el('div',{class:'body'},el('div',{class:'warnbox',text:'Aus „'+file.name+'“ konnten keine Rechnungsdaten gelesen werden. Ist es eine Rechnung aus eurer Vorlage (kein Scan)?'})),
       el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn primary',onclick:next},total>n?'Nächste Rechnung':'Schließen'))));
     return;
   }
+  if(p.isStorno)return drawStornoReview(file,p,head,next,unitId);
   const summary=el('div',{class:'invsum'},el('div',{class:'h'},el('span',{text:p.customer||'Kunde unbekannt'}),el('span',{class:'num',text:p.total!=null?eur2(p.total):''})),
     el('dl',{},
       el('dt',{text:'Objekt'}),el('dd',{text:p.location||'—'}),
@@ -1086,6 +1093,106 @@ function drawInvoiceReview(file,p){
   $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer',role:'dialog','aria-modal':'true','aria-labelledby':'d-title'},head,body,footer));
 }
 
+/* ===== Stornorechnungen ===== */
+// "Abgerechnet bis" ohne die stornierte Rechnung: Ende der letzten noch gültigen Rechnung dieser Buchung.
+function invoicedUntilWithout(bookingId,cancelNo){
+  const c=cancelledNumbers();if(cancelNo)c.add(cancelNo);
+  const ends=invoices.filter(i=>i.booking_id===bookingId&&!i.is_storno&&!c.has(i.number)&&i.period_end).map(i=>i.period_end).sort();
+  return ends.length?ends[ends.length-1]:'';
+}
+function drawStornoReview(file,p,head,next,unitId){
+  const f=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
+  const orig=p.cancels?invoices.find(i=>i.number===p.cancels):null;
+  const dup=invoices.find(i=>i.number===p.number);
+  const st={unitId:unitId||(orig&&UNIT[orig.unit_id]?orig.unit_id:''),company:p.customer||'',target:'',shorten:true,del:false};
+  const summary=el('div',{class:'invsum'},el('div',{class:'h'},el('span',{text:p.customer||'Kunde unbekannt'}),el('span',{class:'num',text:p.total!=null?eur2(p.total):''})),
+    el('dl',{},
+      el('dt',{text:'Storniert'}),el('dd',{text:p.cancels?'Rechnung '+p.cancels:'—'}),
+      el('dt',{text:'Datum'}),el('dd',{class:'num',text:fmt(p.date)}),
+      el('dt',{text:'Zeitraum'}),el('dd',{class:'num',text:fmt(p.periodStart)+' – '+fmt(p.periodEnd)}),
+      el('dt',{text:'Objekt'}),el('dd',{text:p.location||'—'}),
+      el('dt',{text:'Netto / USt.'}),el('dd',{class:'num',text:(p.net!=null?eur2(p.net):'—')+' / '+(p.vat!=null?eur2(p.vat):'—')})));
+  const unitSel=el('select',{id:'sv-unit'},el('option',{value:'',text:'Bitte wählen …'}),allowedBuildings().map(bld=>el('optgroup',{label:bld.name},bld.units.map(([uid,label,cap])=>el('option',{value:uid,text:label+' ('+cap+' Betten)'})))));
+  unitSel.value=st.unitId;
+  const targetSel=el('select',{id:'sv-target'});
+  const detail=el('div',{style:'display:grid;gap:12px'});
+  const saveBtn=el('button',{class:'btn primary'},'Storno verbuchen');
+  function rebuildTargets(){
+    const cands=st.unitId?bookingCandidates(st.unitId,st.company,p.periodStart,p.periodEnd).map(c=>c.b):[];
+    if(orig&&orig.booking_id){const ob=bookings.find(b=>b.id===orig.booking_id);if(ob&&!cands.includes(ob))cands.unshift(ob)}
+    targetSel.replaceChildren(...cands.map(b=>el('option',{value:b.id,text:(b.company||'Ohne Firma')+' · '+fmt(b.start)+' – '+endTxt(b)})),el('option',{value:'',text:'Keine Buchung ändern'}));
+    targetSel.value=orig&&orig.booking_id&&cands.some(b=>b.id===orig.booking_id)?orig.booking_id:(cands[0]?.id||'');
+    st.target=targetSel.value;rebuildDetail();
+  }
+  function rebuildDetail(){
+    detail.replaceChildren();
+    const b=bookings.find(x=>x.id===st.target);
+    if(!b){detail.append(el('div',{class:'hint',text:'Die Stornorechnung wird nur abgelegt. Keine Buchung wird geändert.'}));return}
+    const inv=invoicedUntilWithout(b.id,p.cancels);
+    detail.append(el('div',{class:'hint',text:'„Abgerechnet bis“: '+fmt(b.invoicedUntil)+' → '+(inv?fmt(inv):'— (keine gültige Rechnung mehr)')}));
+    const newLast=addDays(p.periodStart,-1), ld=lastDay(b);
+    if(ld&&ld>=p.periodStart&&ld<=p.periodEnd){
+      if(newLast<b.start){
+        const cb=el('input',{type:'checkbox',id:'sv-del'});cb.checked=st.del;cb.addEventListener('change',()=>st.del=cb.checked);
+        detail.append(el('label',{class:'check',for:'sv-del'},cb,el('span',{text:'Buchung löschen (die Storno umfasst den ganzen Aufenthalt '+fmt(b.start)+' – '+fmt(ld)+')'})));
+      }else{
+        const cb=el('input',{type:'checkbox',id:'sv-short'});cb.checked=st.shorten;cb.addEventListener('change',()=>st.shorten=cb.checked);
+        detail.append(el('label',{class:'check',for:'sv-short'},cb,el('span',{text:'Belegung '+fmt(p.periodStart)+' – '+fmt(ld)+' entfernen, Abreise wird '+fmt(newLast)})));
+      }
+    }
+    if(!orig)detail.append(el('div',{class:'hint',text:'Die stornierte Rechnung '+(p.cancels||'')+' ist nicht im Tool erfasst.'}));
+  }
+  unitSel.addEventListener('change',()=>{st.unitId=unitSel.value;rebuildTargets()});
+  targetSel.addEventListener('change',()=>{st.target=targetSel.value;rebuildDetail()});
+  rebuildTargets();
+  saveBtn.addEventListener('click',async()=>{
+    if(!stornoReady){toast('Für Stornos fehlt noch ein Datenbank-Schritt (SQL 06).');return}
+    if(!st.unitId){toast('Bitte eine Wohnung wählen.');return}
+    saveBtn.disabled=true;
+    try{await saveStorno(file,p,st);toast('Storno '+p.number+' verbucht');next()}
+    catch(e){saveBtn.disabled=false;toast(e.message||'Verbuchen hat nicht geklappt.')}
+  });
+  const body=el('div',{class:'body'},summary,
+    dup?el('div',{class:'warnbox',text:'Stornorechnung '+p.number+' ist schon erfasst.'}):null,
+    !stornoReady?el('div',{class:'warnbox',text:'Für Stornorechnungen muss einmalig das SQL „06_storno.sql“ in Supabase ausgeführt werden.'}):null,
+    orig?el('div',{class:'hint',text:'Gehört zu Rechnung '+orig.number+' ('+fmt(orig.period_start)+' – '+fmt(orig.period_end)+', '+(orig.total!=null?eur2(+orig.total):'')+').'}):null,
+    f('sv-unit','Wohnung',unitSel,el('div',{class:'hint',text:unitId?'Erkannt aus „'+p.location+'“':(orig?'Aus der stornierten Rechnung':'Bitte wählen')})),
+    f('sv-target','Buchung',targetSel),
+    detail);
+  const footer=el('footer',{},el('button',{class:'btn',onclick:next},'Überspringen'),el('span',{class:'grow'}),dup?null:saveBtn);
+  $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer',role:'dialog','aria-modal':'true','aria-labelledby':'d-title'},head,body,footer));
+}
+async function saveStorno(file,p,st){
+  let bookingId=st.target||null;
+  const b=bookingId?bookings.find(x=>x.id===bookingId):null;
+  if(b){
+    const ld=lastDay(b), newLast=addDays(p.periodStart,-1), inPeriod=ld&&ld>=p.periodStart&&ld<=p.periodEnd;
+    if(inPeriod&&newLast<b.start&&st.del){
+      const {error}=await sb.from('bookings').delete().eq('id',b.id);
+      if(error)throw new Error('Buchung konnte nicht gelöscht werden: '+error.message);
+      bookingId=null;
+    }else{
+      const upd={invoiced_until:invoicedUntilWithout(b.id,p.cancels)||null};
+      if(inPeriod&&newLast>=b.start&&st.shorten){
+        if(b.extendedUntil&&b.endOriginal&&newLast>b.endOriginal)upd.extended_until=newLast;
+        else if(b.extendedUntil&&b.endOriginal===newLast)upd.extended_until=null;
+        else{upd.end_original=newLast;upd.extended_until=null}
+      }
+      const {error}=await sb.from('bookings').update(upd).eq('id',b.id);
+      if(error)throw new Error('Buchung konnte nicht aktualisiert werden: '+error.message);
+    }
+  }
+  const safe=String(p.number).replace(/[^A-Za-z0-9._-]/g,'_');
+  let filePath=(p.date||TODAY).slice(0,4)+'/'+safe+'.pdf';
+  const up=await sb.storage.from('rechnungen').upload(filePath,file,{contentType:'application/pdf',upsert:false});
+  if(up.error){const alt=filePath.replace('.pdf','-'+Date.now()+'.pdf');const up2=await sb.storage.from('rechnungen').upload(alt,file,{contentType:'application/pdf'});filePath=up2.error?null:alt}
+  const {error}=await sb.from('invoices').insert({number:p.number,invoice_date:p.date||null,customer:p.customer,unit_id:st.unitId,location_text:p.location,
+    period_start:p.periodStart,period_end:p.periodEnd,quantity:p.quantity,unit_price:p.unitPrice,vat_rate:p.vatRate,net:p.net,vat:p.vat,total:p.total,
+    booking_id:bookingId,file_path:filePath,is_storno:true,cancels:p.cancels||null});
+  if(error)throw new Error(error.code==='23505'?'Stornorechnung '+p.number+' ist schon erfasst.':'Storno konnte nicht gespeichert werden: '+error.message);
+  await loadBookings();
+}
+
 async function saveInvoice(file,p,st){
   let bookingId=st.target;
   if(st.target==='new'){
@@ -1135,7 +1242,8 @@ async function fillInvoiceList(box,bookingId){
   if(paths.length){const {data}=await sb.storage.from('rechnungen').createSignedUrls(paths,3600);(data||[]).forEach(d=>{if(d.signedUrl)urls[d.path]=d.signedUrl})}
   box.replaceChildren(el('div',{class:'field'},el('label',{text:'Rechnungen ('+list.length+')'}),
     el('div',{class:'invlist'},list.map(i=>{
-      const kids=[el('span',{text:'Nr. '+i.number+' · '+fmt(i.period_start)+' – '+fmt(i.period_end)}),el('b',{text:i.total!=null?eur2(+i.total):''})];
+      const canc=cancelledNumbers().has(i.number);
+      const kids=[el('span',{text:(i.is_storno?'Storno '+i.number+(i.cancels?' zu '+i.cancels:''):'Nr. '+i.number)+' · '+fmt(i.period_start)+' – '+fmt(i.period_end)+(canc?' · storniert':''),style:canc?'text-decoration:line-through;color:var(--muted)':''}),el('b',{text:i.total!=null?eur2(+i.total):''})];
       return urls[i.file_path]?el('a',{href:urls[i.file_path],target:'_blank',rel:'noopener',title:'PDF öffnen'},...kids):el('span',{class:'row'},...kids);
     }))));
 }
@@ -1197,10 +1305,11 @@ $('#auth-form').addEventListener('submit',async e=>{
 $('#btn-logout').addEventListener('click',async()=>{await sb.auth.signOut()});
 
 async function loadBookings(){
-  const [{data,error},inv]=await Promise.all([
+  let [{data,error},inv]=await Promise.all([
     sb.from('bookings').select('*').order('start_date'),
-    sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path').order('invoice_date',{ascending:false})]);
+    sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path,is_storno,cancels').order('invoice_date',{ascending:false})]);
   if(error){toast('Buchungen konnten nicht geladen werden.');return}
+  if(inv.error){inv=await sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path').order('invoice_date',{ascending:false});stornoReady=false}else stornoReady=true;
   invoices=inv.error?[]:inv.data;invoicesReady=!inv.error;
   bookings=data.map(fromRow);loaded=true;render();
   if(editing&&editing.id&&!bookings.find(b=>b.id===editing.id)){closeDrawer();toast('Diese Buchung wurde gelöscht.')}
