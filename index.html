@@ -159,6 +159,11 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .util{display:flex;align-items:center;gap:5px;font-family:var(--font-num);font-size:11px;color:var(--muted);white-space:nowrap}
 .util i{display:block;width:26px;height:4px;border-radius:2px;background:var(--sunk);overflow:hidden}
 .util i b{display:block;height:100%;background:var(--accent)}
+/* Ampel Auslastung: bis 50 % rot, über 50 bis unter 80 % gelb, ab 80 % grün */
+.util.lv-bad{color:var(--bad);font-weight:600}.util.lv-bad i b,.meter i.lv-bad{background:var(--bad)}
+.util.lv-warn{color:var(--warn);font-weight:600}.util.lv-warn i b,.meter i.lv-warn{background:var(--warn)}
+.util.lv-ok{color:var(--ok);font-weight:600}.util.lv-ok i b,.meter i.lv-ok{background:var(--ok)}
+.kpi .sub.lv-bad{color:var(--bad);font-weight:600}.kpi .sub.lv-warn{color:var(--warn);font-weight:600}.kpi .sub.lv-ok{color:var(--ok);font-weight:600}
 .tl-group .util{margin-left:auto;font-weight:500}
 .tl-group .tl-lab{display:flex;align-items:center;gap:6px}
 .tl-group .tl-lab>span:first-child{overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -516,7 +521,7 @@ function renderKpis(){
   const k=(lbl,val,sub,meter)=>el('div',{class:'kpi'},el('div',{class:'lbl',text:lbl}),val,el('div',{class:'sub',text:sub}),meter||null);
   const v=(a,b)=>{const d=el('div',{class:'val'});d.append(a);if(b)d.append(el('small',{text:' '+b}));return d};
   $('#kpis').replaceChildren(
-    k('Betten belegt heute',v(String(beds),'/ '+scopeBeds),pct+' % Auslastung',el('div',{class:'meter'},el('i',{style:'width:'+Math.min(100,pct)+'%'}))),
+    (()=>{const raw=scopeBeds?beds/scopeBeds*100:0,lv=utilLevel(raw);const c=k('Betten belegt heute',v(String(beds),'/ '+scopeBeds),pct+' % Auslastung',el('div',{class:'meter'},el('i',{class:lv,style:'width:'+Math.min(100,pct)+'%'})));c.querySelector('.sub').classList.add(lv);return c})(),
     k('Wohnungen belegt',v(String(units),'/ '+SU().length),(SU().length-units)+' komplett frei'),
     k('Noch nicht abgerechnet',v(eur(open)),openN?openN+' Buchung'+(openN>1?'en':'')+' mit offenen Nächten':'alles abgerechnet'),
     k('Umsatz '+new Date(toT(mFrom)).toLocaleDateString('de-DE',{month:'long',timeZone:'UTC'})+' (netto)',v(eur(rev.net+rev.est)),
@@ -586,9 +591,10 @@ function bedNights(uid,from,to){
   for(let d=from;d<to;d=addDays(d,1))t+=Math.min(cap,bs.reduce((s,b)=>s+(b.start<=d&&endOf(b)>d?(+b.persons||0):0),0));
   return t;
 }
+const utilLevel=r=>r<=50?'lv-bad':r<80?'lv-warn':'lv-ok';
 function utilEl(used,capN,bar){
-  const pct=capN?Math.round(used/capN*100):0;
-  return el('span',{class:'util',title:'Auslastung im Monat: '+used+' von '+capN+' Bettnächten'},bar?el('i',{},el('b',{style:'width:'+Math.min(100,pct)+'%'})):null,pct+' %');
+  const raw=capN?used/capN*100:0, pct=Math.round(raw);
+  return el('span',{class:'util '+utilLevel(raw),title:'Auslastung im Monat: '+used+' von '+capN+' Bettnächten'},bar?el('i',{},el('b',{style:'width:'+Math.min(100,pct)+'%'})):null,pct+' %');
 }
 function renderTimeline(){
   const from=tlMonth+'-01', to=addMonths(from,1), days=diff(from,to);
