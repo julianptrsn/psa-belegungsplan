@@ -1375,7 +1375,7 @@ function matchUnit(location){
   const rest=floorPart||floorKey(m[1].slice(bld.name.length));
   if(bld.units.length===1&&!rest)return bld.units[0][0];
   if(!rest)return null;
-  const cand=bld.units.filter(([id,label])=>{const k=floorKey(label);const k2=k.replace('rechts','r').replace('links','l');return k===rest||k2===rest||(rest.length>=2&&(k.startsWith(rest)||rest.startsWith(k)))});
+  const cand=bld.units.filter(([id,label])=>{const k=floorKey(label);const k2=k.replace('rechts','r').replace('links','l');return k===rest||k2===rest||(rest.length>=2&&(k.startsWith(rest)||rest.startsWith(k)))||(rest.length>=4&&k.includes(rest))});
   return cand.length===1?cand[0][0]:(bld.units.length===1?bld.units[0][0]:null);
 }
 const sameOwner=(issuer,owner)=>{const a=String(issuer||'').toLowerCase();return owner==='Torben Schmidt'?/torben|schmidt/.test(a):/psa/.test(a)};
