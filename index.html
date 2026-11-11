@@ -244,6 +244,24 @@ td .s{font-size:12px;color:var(--muted)}
 .invlist b{font-family:var(--font-num);font-weight:500}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,calc(env(safe-area-inset-bottom,0px) + 12px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:30}
 .ro-note{font-size:13px;color:var(--muted)}
+/* Rechnungsstellung */
+.filters .grow{flex:1}
+a.btn{text-decoration:none;color:inherit}
+.drawer.wide{width:min(720px,100%)}
+.lines{display:grid;gap:8px}
+.line{display:grid;grid-template-columns:120px 1fr 64px 92px 62px 30px;gap:6px;align-items:start}
+.line input,.line select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg);min-width:0;font-size:14px}
+.line .amt{grid-column:2/6;font-size:12px;color:var(--muted);text-align:right;margin-top:-4px}
+.line.auto{background:var(--sunk);border-radius:8px;padding:8px;grid-template-columns:1fr auto}
+.lines-head{display:grid;grid-template-columns:120px 1fr 64px 92px 62px 30px;gap:6px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+@media (max-width:600px){.line,.lines-head{grid-template-columns:1fr 1fr 1fr}.lines-head{display:none}.line>*:nth-child(2){grid-column:1/-1}.line .amt{grid-column:1/-1}}
+.sumbox{background:var(--sunk);border-radius:8px;padding:10px 12px;display:grid;gap:4px;font-size:14px}
+.sumbox div{display:flex;justify-content:space-between;gap:10px}
+.sumbox b,.sumbox span.num{font-family:var(--font-num);font-weight:500}
+.sumbox .tot{font-weight:700;border-top:1px solid var(--line);padding-top:6px;margin-top:2px}
+.sec{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-top:1px solid var(--line-soft);padding-top:12px;margin-top:2px}
+.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+@media (max-width:600px){.three{grid-template-columns:1fr 1fr}}
 @media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -274,6 +292,7 @@ td .s{font-size:12px;color:var(--muted)}
       <button role="tab" id="tab-ov" data-view="ov" aria-selected="true">Übersicht</button>
       <button role="tab" id="tab-tl" data-view="tl" aria-selected="false">Belegungsplan</button>
       <button role="tab" id="tab-ls" data-view="ls" aria-selected="false">Buchungen</button>
+      <button role="tab" id="tab-rg" data-view="rg" aria-selected="false">Rechnungen</button>
     </div>
     <button class="btn" id="btn-dep" hidden title="Bestätigte Abreise für eine Buchung eintragen">Abreise</button>
     <button class="btn" id="btn-inv" hidden title="Eine oder mehrere Rechnungen als PDF hochladen">Rechnung hochladen</button>
@@ -293,6 +312,7 @@ td .s{font-size:12px;color:var(--muted)}
       <div class="panel"><header><h2>Bestätigte Abreisen (21 Tage)</h2><button class="btn small" id="btn-dep2" hidden>+ Abreise</button></header><ul class="rows" id="ov-end"></ul></div>
       <div class="panel"><header><h2>Freie Betten heute</h2><span id="ov-free-sum"></span></header><div class="freelist" id="ov-free"></div></div>
       <div class="panel"><header><h2>Anreisen in den nächsten 21 Tagen</h2><span>bestätigt &amp; reserviert</span></header><ul class="rows" id="ov-start"></ul></div>
+      <div class="panel" id="ov-overdue-panel" hidden style="grid-column:1/-1"><header><h2>Überfällige Rechnungen</h2><span id="ov-overdue-sum"></span></header><ul class="rows" id="ov-overdue"></ul></div>
       <div class="panel" id="ov-orphan-panel" hidden style="grid-column:1/-1"><header><h2>Rechnungen ohne Buchung</h2><span>die Buchung wurde gelöscht – tippen, um sie neu anzulegen</span></header><ul class="rows" id="ov-orphan"></ul></div>
       <div class="panel" id="ov-open-panel" hidden style="grid-column:1/-1"><header><h2>Ohne Abreise und ohne Rechnung</h2><span>gelten als belegt ohne Ende – bitte Abreise eintragen</span></header><ul class="rows" id="ov-open"></ul></div>
       <div class="panel" id="ov-chg-panel" hidden style="grid-column:1/-1"><header><h2>Wechseltage</h2><span>Abreise und Anreise am selben Tag – Reinigung und Schlüssel gut planen</span></header><ul class="rows" id="ov-chg"></ul></div>
@@ -334,6 +354,28 @@ td .s{font-size:12px;color:var(--muted)}
       <thead><tr><th>Wohnung</th><th>Firma</th><th class="r">Pers.</th><th>Zeitraum</th><th class="r">Preis</th><th class="r">€ / Pers. / Nacht</th><th>Abgerechnet bis</th><th class="r">Offen</th><th>Status</th></tr></thead>
       <tbody id="ls-body"></tbody>
     </table></div>
+  </section>
+
+  <section class="view" id="view-rg" hidden>
+    <div class="filters">
+      <div class="seg" id="rg-mode">
+        <button data-m="inv" aria-pressed="true">Rechnungen</button>
+        <button data-m="cus" aria-pressed="false">Kunden</button>
+      </div>
+      <div class="seg" id="rg-seg">
+        <button data-f="open" aria-pressed="true">Offen</button>
+        <button data-f="overdue" aria-pressed="false">Überfällig</button>
+        <button data-f="paid" aria-pressed="false">Bezahlt</button>
+        <button data-f="all" aria-pressed="false">Alle</button>
+      </div>
+      <input class="search" id="rg-q" type="search" placeholder="Kunde, Nummer oder Wohnung">
+      <span class="grow"></span>
+      <button class="btn small" id="btn-bset" hidden>Einstellungen</button>
+      <button class="btn small" id="btn-cus" hidden>+ Kunde</button>
+      <button class="btn small primary" id="btn-rnew" hidden>+ Rechnung</button>
+    </div>
+    <div id="rg-note"></div>
+    <div class="tbl-wrap"><table id="rg-table"><thead id="rg-head"></thead><tbody id="rg-body"></tbody></table></div>
   </section>
 </main>
 </div>
@@ -502,7 +544,7 @@ let sb=null, myId=null, memberNames={}, isMember=false, channel=null;
 const downloads=true; // CSV-Download ist auf der eigenen Seite immer möglich
 const db=true;
 let view='ov', tlMonth=TODAY.slice(0,7), lsFilter='active', lsQuery='';
-try{const v=localStorage.getItem('mafl-view');if(['ov','tl','ls'].includes(v))view=v}catch(e){}
+try{const v=localStorage.getItem('mafl-view');if(['ov','tl','ls','rg'].includes(v))view=v}catch(e){}
 
 const $=s=>document.querySelector(s);
 const el=(tag,attrs={},...kids)=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs)){if(k==='class')e.className=v;else if(k==='text')e.textContent=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v)}kids.flat().forEach(c=>c!=null&&e.append(c));return e};
@@ -512,7 +554,7 @@ const unitName=id=>{const u=UNIT[id];return u?(u.label==='Wohnung'?u.addr:u.addr
 /* ===== Rendering ===== */
 function render(){
   document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.view===view));
-  ['ov','tl','ls'].forEach(v=>$('#view-'+v).hidden=v!==view);
+  ['ov','tl','ls','rg'].forEach(v=>$('#view-'+v).hidden=v!==view);
   $('#btn-new').hidden=!canWrite;
   $('#btn-inv').hidden=!canWrite;
   $('#btn-dep').hidden=!canWrite;
@@ -522,6 +564,7 @@ function render(){
   if(view==='ov')renderOverview();
   if(view==='tl')renderTimeline();
   if(view==='ls')renderList();
+  if(view==='rg')renderBilling();
   $('#companies').replaceChildren(...[...new Set(bookings.map(b=>b.company).filter(Boolean))].sort().map(c=>el('option',{value:c})));
 }
 
@@ -583,6 +626,7 @@ function renderOverview(){
   $('#ov-free-sum').textContent=freeBeds+' von '+scopeBeds;
   $('#ov-free').replaceChildren(...(chips.length?chips:[el('span',{class:'empty',style:'padding:0',text:'Heute ist alles belegt.'})]));
 
+  renderOverdue();
   const orphans=activeInvoices().filter(i=>inScope(i.unit_id)&&(!i.booking_id||!bookings.find(b=>b.id===i.booking_id)));
   $('#ov-orphan-panel').hidden=!orphans.length;
   $('#ov-orphan').replaceChildren(...orphans.map(i=>el('li',{tabindex:'0',onclick:()=>openOrphan(i),onkeydown:e=>{if(e.key==='Enter')openOrphan(i)}},
@@ -785,7 +829,9 @@ async function drawDrawer(){
     const saveBtn=el('button',{class:'btn primary',onclick:()=>saveBooking(saveBtn)},isNew?'Buchung anlegen':'Speichern');
     footer.append(
       isNew?null:el('button',{class:'btn danger',onclick:()=>{confirmBox.replaceChildren(el('div',{class:'confirm'},el('span',{text:'Buchung wirklich löschen?'}),el('button',{class:'btn small danger',onclick:()=>deleteBooking()},'Löschen'),el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')))}},'Löschen'),
-      el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Abbrechen'),saveBtn);
+      el('span',{class:'grow'}),
+      !isNew&&billingReady?el('button',{class:'btn',onclick:()=>{const id=editing.id;closeDrawer();openInvoiceDrawer({bookingId:id})}},'Rechnung schreiben'):null,
+      el('button',{class:'btn',onclick:closeDrawer},'Abbrechen'),saveBtn);
   }
   const drawer=el('div',{class:'drawer',role:'dialog','aria-modal':'true','aria-labelledby':'d-title'},
     el('header',{},el('h2',{id:'d-title',text:isNew?'Neue Buchung':(d.company||'Buchung')}),el('button',{class:'btn small',onclick:closeDrawer,'aria-label':'Schließen'},'✕')),
@@ -1431,6 +1477,603 @@ document.addEventListener('dragleave',()=>{if(--dragDepth<=0&&dz){dz.remove();dz
 document.addEventListener('drop',e=>{if(!hasFiles(e))return;e.preventDefault();dragDepth=0;if(dz){dz.remove();dz=null}if(canWrite&&e.dataTransfer.files.length)startInvoiceImport(e.dataTransfer.files)});
 
 
+/* ===== Rechnungsstellung: Kunden, Rechnungen, Einstellungen ===== */
+// Rechnungen aus dem Tool bekommen ihre Nummer in der Datenbank (create_invoice) und sind danach unveränderlich.
+// Korrekturen laufen ausschließlich über Stornorechnungen.
+let customers=[], issuers={}, bset=null, billingReady=false;
+let rgMode='inv', rgFilter='open', rgQuery='';
+const r2=n=>Math.round((+n+Number.EPSILON)*100)/100;
+const fmtL=s=>s?s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4):'';
+const num2=n=>(+n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pctTxt=n=>(+n).toLocaleString('de-DE',{maximumFractionDigits:2})+' %';
+const LINE_KINDS={night:{label:'Übernachtung',vat:7,base:true,text:'Übernachtungen'},
+  cleaning:{label:'Endreinigung',vat:19,base:true,text:'Endreinigung'},
+  clean2:{label:'Reinigung',vat:19,base:false,text:'Reinigung'},
+  repair:{label:'Reparatur',vat:19,base:false,text:'Reparatur'},
+  other:{label:'Sonstiges',vat:19,base:false,text:''}};
+const custName=c=>c?(c.kind==='private'?[c.first_name,c.last_name].filter(Boolean).join(' '):c.company_name)||'Ohne Namen':'';
+const locText=uid=>{const u=UNIT[uid];return u?(u.label==='Wohnung'?u.addr:u.addr+' ('+u.label+')'):''};
+
+async function loadBilling(){
+  const [c,i,s]=await Promise.all([sb.from('customers').select('*').order('company_name'),sb.from('issuers').select('*'),sb.from('billing_settings').select('*').eq('id',1)]);
+  billingReady=!c.error&&!i.error&&!s.error;
+  if(!billingReady){customers=[];return}
+  customers=c.data;issuers=Object.fromEntries(i.data.map(x=>[x.id,x]));bset=s.data[0]||null;
+  const ext=await sb.from('invoices').select('id,due_date,vat,vat_rate,location_text,source,issuer,issuer_snapshot,customer_id,customer_snapshot,lines,lodging_tax,lodging_exempt,lodging_exempt_note,notes,paid_at,sent_at,dunning_level,dunning_at');
+  if(!ext.error){const m=Object.fromEntries(ext.data.map(x=>[x.id,x]));invoices=invoices.map(x=>({...x,...(m[x.id]||{})}))}
+}
+
+/* --- Status --- */
+function invStatus(i){
+  if(i.is_storno)return{key:'storno',label:'Storno',cls:'neutral'};
+  if(cancelledNumbers().has(i.number))return{key:'cancelled',label:'storniert',cls:'neutral'};
+  if(i.paid_at)return{key:'paid',label:'bezahlt '+fmt(i.paid_at),cls:'ok'};
+  if(i.source!=='tool')return{key:'import',label:'aus Zervant',cls:'neutral'};
+  if(i.due_date&&i.due_date<TODAY){const d=diff(i.due_date,TODAY);return{key:'overdue',label:d+' T. überfällig',cls:d>=(bset?.dunning2_days??7)?'bad':'warn',days:d}}
+  return{key:'open',label:i.due_date?'fällig '+fmt(i.due_date):'offen',cls:'info'};
+}
+const isOpenInv=i=>['open','overdue'].includes(invStatus(i).key);
+
+function renderOverdue(){
+  const p=$('#ov-overdue-panel');if(!p)return;
+  const list=billingReady?invoices.filter(i=>inScope(i.unit_id)&&invStatus(i).key==='overdue').sort((a,c)=>a.due_date<c.due_date?-1:1):[];
+  p.hidden=!list.length;
+  $('#ov-overdue-sum').textContent=list.length?eur2(list.reduce((s,i)=>s+(+i.total||0),0))+' offen':'';
+  $('#ov-overdue').replaceChildren(...list.map(i=>{const st=invStatus(i);
+    return el('li',{tabindex:'0',onclick:()=>openInvoiceDetail(i.id),onkeydown:e=>{if(e.key==='Enter')openInvoiceDetail(i.id)}},
+      el('div',{class:'main'},el('div',{class:'t',text:(i.customer||'Kunde')+' · Nr. '+i.number}),el('div',{class:'s',text:unitName(i.unit_id)+' · fällig seit '+fmt(i.due_date)})),
+      el('div',{class:'r'},el('span',{class:'pill '+st.cls,text:st.label}),el('div',{class:'s',text:eur2(+i.total||0)})))}));
+}
+
+/* --- Liste --- */
+function renderBilling(){
+  document.querySelectorAll('#rg-mode button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===rgMode));
+  document.querySelectorAll('#rg-seg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.f===rgFilter));
+  $('#rg-seg').hidden=rgMode!=='inv';
+  $('#btn-rnew').hidden=!canWrite||!billingReady;$('#btn-cus').hidden=!canWrite||!billingReady;$('#btn-bset').hidden=!canWrite||!billingReady;
+  $('#rg-q').placeholder=rgMode==='inv'?'Kunde, Nummer oder Wohnung':'Firma, Name, E-Mail oder Ort';
+  const note=$('#rg-note');note.replaceChildren();
+  const head=$('#rg-head'),body=$('#rg-body');
+  if(!billingReady){
+    note.append(el('div',{class:'notice',style:'margin-bottom:12px'},el('b',{text:'Rechnungsstellung ist noch nicht eingerichtet. '}),'Bitte einmal „supabase/08_rechnungsstellung.sql“ im Supabase SQL Editor ausführen.'));
+    head.replaceChildren();body.replaceChildren();return;
+  }
+  const q=rgQuery.trim().toLowerCase();
+  if(rgMode==='cus'){
+    head.replaceChildren(el('tr',{},el('th',{text:'Nr.'}),el('th',{text:'Kunde'}),el('th',{text:'Kontakt'}),el('th',{text:'Ort'}),el('th',{class:'r',text:'Zahlungsziel'}),el('th',{class:'r',text:'Offen'}),el('th',{text:'Abgabe'})));
+    let list=customers.slice();
+    if(q)list=list.filter(c=>[custName(c),c.customer_no,c.first_name,c.last_name,c.city,...(c.emails||[])].join(' ').toLowerCase().includes(q));
+    list.sort((a,c)=>custName(a).localeCompare(custName(c),'de'));
+    if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'7',class:'empty',text:customers.length?'Kein Kunde passt zur Suche.':'Noch keine Kunden. Lege den ersten über „+ Kunde“ an.'})));return}
+    body.replaceChildren(...list.map(c=>{
+      const open=invoices.filter(i=>i.customer_id===c.id&&isOpenInv(i)).reduce((s,i)=>s+(+i.total||0),0);
+      return el('tr',{onclick:()=>openCustomerDrawer(c.id)},
+        el('td',{class:'num',text:c.customer_no||'—'}),
+        el('td',{},el('div',{text:custName(c)}),c.kind==='company'&&(c.first_name||c.last_name)?el('div',{class:'s',text:[c.first_name,c.last_name].filter(Boolean).join(' ')}):null),
+        el('td',{},el('div',{text:(c.emails||[])[0]||'—'}),c.phone?el('div',{class:'s',text:c.phone}):null),
+        el('td',{text:[c.zip,c.city].filter(Boolean).join(' ')||'—'}),
+        el('td',{class:'r num',text:c.payment_days?c.payment_days+' Tage':'sofort'}),
+        el('td',{class:'r num',text:open?eur2(open):'—'}),
+        el('td',{},c.lodging_exempt?el('span',{class:'pill warn',text:'befreit'}):el('span',{class:'s',text:'—'})));
+    }));
+    return;
+  }
+  head.replaceChildren(el('tr',{},el('th',{text:'Nr.'}),el('th',{text:'Datum'}),el('th',{text:'Kunde'}),el('th',{text:'Wohnung · Zeitraum'}),el('th',{class:'r',text:'Brutto'}),el('th',{text:'Status'})));
+  let list=invoices.filter(i=>inScope(i.unit_id)||(!i.unit_id&&canWrite));
+  list=list.filter(i=>{const k=invStatus(i).key;
+    if(rgFilter==='open')return k==='open'||k==='overdue';
+    if(rgFilter==='overdue')return k==='overdue';
+    if(rgFilter==='paid')return k==='paid';
+    return true});
+  if(q)list=list.filter(i=>[i.number,i.customer,unitName(i.unit_id)].join(' ').toLowerCase().includes(q));
+  list.sort((a,c)=>(a.invoice_date||'')<(c.invoice_date||'')?1:(a.invoice_date||'')>(c.invoice_date||'')?-1:(a.number<c.number?1:-1));
+  if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'6',class:'empty',text:rgFilter==='open'?'Keine offenen Rechnungen aus dem Tool.':'Keine Rechnungen für diesen Filter.'})));return}
+  body.replaceChildren(...list.map(i=>{const st=invStatus(i);
+    return el('tr',{onclick:()=>openInvoiceDetail(i.id)},
+      el('td',{class:'num'},el('div',{text:i.number}),i.source==='tool'?null:el('div',{class:'s',text:'Import'})),
+      el('td',{class:'num',text:fmt(i.invoice_date)}),
+      el('td',{text:i.customer||'—'}),
+      el('td',{},el('div',{text:i.unit_id?unitName(i.unit_id):'—'}),el('div',{class:'s num',text:fmt(i.period_start)+' – '+fmt(i.period_end)})),
+      el('td',{class:'r num',text:i.total!=null?eur2(+i.total):'—'}),
+      el('td',{},el('span',{class:'pill '+st.cls,text:st.label})));
+  }));
+}
+document.querySelectorAll('#rg-mode button').forEach(b=>b.addEventListener('click',()=>{rgMode=b.dataset.m;renderBilling()}));
+document.querySelectorAll('#rg-seg button').forEach(b=>b.addEventListener('click',()=>{rgFilter=b.dataset.f;renderBilling()}));
+$('#rg-q').addEventListener('input',e=>{rgQuery=e.target.value;renderBilling()});
+$('#btn-rnew').addEventListener('click',()=>openInvoiceDrawer({}));
+$('#btn-cus').addEventListener('click',()=>openCustomerDrawer(null));
+$('#btn-bset').addEventListener('click',()=>openBillingSettings());
+
+/* --- Gemeinsame Drawer-Bausteine --- */
+const fld=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
+function bind(obj,key,id,type='text',extra={}){
+  const i=el('input',{id,type,value:obj[key]??'',...extra});i.disabled=!canWrite;
+  i.addEventListener('input',()=>{obj[key]=type==='number'?(i.value===''?'':+i.value):i.value;i.dispatchEvent(new Event('bound',{bubbles:true}))});return i}
+function selectEl(id,opts,val,on){const s=el('select',{id},opts.map(([v,t])=>el('option',{value:v,text:t})));s.value=val??'';s.disabled=!canWrite;s.addEventListener('change',()=>on(s.value));return s}
+function showDrawer(title,body,footer,wide){
+  $('#drawer-root').replaceChildren(el('div',{class:'scrim',onclick:closeDrawer}),el('div',{class:'drawer'+(wide?' wide':''),role:'dialog','aria-modal':'true','aria-labelledby':'d-title'},
+    el('header',{},el('h2',{id:'d-title',text:title}),el('button',{class:'btn small',onclick:closeDrawer,'aria-label':'Schließen'},'✕')),body,footer));
+}
+
+/* --- Kunden --- */
+const EMPTY_CUSTOMER=()=>({kind:'company',customer_no:'',company_name:'',tax_number:'',vat_id:'',first_name:'',last_name:'',phone:'',emails:[],street:'',street2:'',zip:'',city:'',country:'DE',language:'de',payment_days:bset?.default_payment_days??3,leitweg_id:'',lodging_exempt:false,lodging_exempt_note:'',notes:''});
+function nextCustomerNo(){const n=customers.map(c=>parseInt(c.customer_no,10)).filter(x=>!isNaN(x));return String(n.length?Math.max(...n)+1:1001)}
+function openCustomerDrawer(id,preset,onSaved){
+  const c0=id?customers.find(c=>c.id===id):null;
+  const d={...EMPTY_CUSTOMER(),...(c0||{}),...(preset||{})};d.emails=[...(d.emails||[])];while(d.emails.length<3)d.emails.push('');
+  editing={id:id||null,customer:true};
+  const ro=!canWrite;
+  const compBox=el('div',{style:'display:grid;gap:14px'});
+  const kindSel=selectEl('c-kind',[['company','Firmenkunde'],['private','Privatkunde']],d.kind,v=>{d.kind=v;drawKind()});
+  function drawKind(){compBox.replaceChildren(
+    d.kind==='company'?fld('c-company','Firmenname *',bind(d,'company_name','c-company','text',{autocomplete:'organization'})):null,
+    el('div',{class:'two'},fld('c-first','Vorname'+(d.kind==='company'?' (Ansprechpartner)':''),bind(d,'first_name','c-first')),fld('c-last','Nachname'+(d.kind==='private'?' *':''),bind(d,'last_name','c-last'))))}
+  drawKind();
+  const mails=el('div',{style:'display:grid;gap:6px'},d.emails.map((m,ix)=>{const i=el('input',{type:'email',value:m,placeholder:ix?'weitere E-Mail (optional)':'rechnung@firma.de'});i.disabled=ro;i.addEventListener('input',()=>d.emails[ix]=i.value.trim());return i}));
+  const payHint=el('div',{class:'hint',text:'Tage nach Rechnungsdatum. 0 = sofort fällig. Lässt sich pro Rechnung ändern.'});
+  const exNote=bind(d,'lodging_exempt_note','c-exnote','text',{placeholder:'z. B. Dauerwohnsitz, Nachweis vom …'});
+  const exCb=el('input',{type:'checkbox',id:'c-ex'});exCb.checked=!!d.lodging_exempt;exCb.disabled=ro;
+  const exWrap=el('div',{hidden:!d.lodging_exempt},fld('c-exnote','Grund der Befreiung',exNote));
+  exCb.addEventListener('change',()=>{d.lodging_exempt=exCb.checked;exWrap.hidden=!exCb.checked});
+  const notes=el('textarea',{id:'c-notes'});notes.value=d.notes||'';notes.disabled=ro;notes.addEventListener('input',()=>d.notes=notes.value);
+  const confirmBox=el('div');
+  const used=c0?invoices.filter(i=>i.customer_id===c0.id).length:0;
+  const body=el('div',{class:'body'},
+    el('div',{class:'two'},fld('c-kind','Kundentyp',kindSel),fld('c-no','Kundennummer',bind(d,'customer_no','c-no','text',{placeholder:'z. B. '+nextCustomerNo()}))),
+    el('div',{class:'sec',text:'Kontaktdaten'}),compBox,
+    el('div',{class:'two'},fld('c-tax','Steuernummer',bind(d,'tax_number','c-tax')),fld('c-vat','USt-IdNr.',bind(d,'vat_id','c-vat','text',{placeholder:'DE123456789'}))),
+    fld('c-phone','Telefon',bind(d,'phone','c-phone','tel')),
+    el('div',{class:'field'},el('label',{text:'E-Mail (bis zu 3 Adressen)'}),mails,el('div',{class:'hint',text:'An diese Adressen gehen später Rechnungen und Mahnungen.'})),
+    el('div',{class:'sec',text:'Rechnungsadresse'}),
+    fld('c-street','Straße und Hausnummer',bind(d,'street','c-street','text',{autocomplete:'address-line1'})),
+    fld('c-street2','Adresszusatz',bind(d,'street2','c-street2','text',{autocomplete:'address-line2'})),
+    el('div',{class:'three'},fld('c-zip','PLZ',bind(d,'zip','c-zip','text',{inputmode:'numeric',autocomplete:'postal-code'})),fld('c-city','Ort',bind(d,'city','c-city')),
+      fld('c-country','Land',selectEl('c-country',[['DE','Deutschland'],['DK','Dänemark'],['PL','Polen'],['NL','Niederlande'],['AT','Österreich'],['RO','Rumänien'],['LT','Litauen'],['CZ','Tschechien'],['SE','Schweden'],['NO','Norwegen']],d.country,v=>d.country=v))),
+    el('div',{class:'sec',text:'Rechnungsdetails'}),
+    el('div',{class:'two'},fld('c-days','Zahlungsziel (Tage)',bind(d,'payment_days','c-days','number',{min:'0',max:'120',step:'1',inputmode:'numeric'}),payHint),
+      fld('c-lang','Rechnungssprache',selectEl('c-lang',[['de','Deutsch'],['en','Englisch']],d.language,v=>d.language=v))),
+    fld('c-leitweg','E-Rechnungsadresse (Leitweg-ID)',bind(d,'leitweg_id','c-leitweg','text',{placeholder:'nur für Behörden, z. B. 04011000-1234512345-06'})),
+    el('label',{class:'check',for:'c-ex'},exCb,el('span',{text:'Von der Beherbergungsabgabe befreit (Übernachtung dient dem Grundbedürfnis nach Wohnraum)'})),exWrap,
+    fld('c-notes','Notizen',notes),confirmBox,
+    used?el('div',{class:'meta',text:used+' Rechnung(en) an diesen Kunden. Geschriebene Rechnungen behalten die Adresse von damals.'}):null);
+  const saveBtn=el('button',{class:'btn primary'},id?'Speichern':'Kunde anlegen');
+  saveBtn.addEventListener('click',async()=>{
+    const row={kind:d.kind,customer_no:(d.customer_no||'').trim()||null,company_name:(d.company_name||'').trim(),tax_number:(d.tax_number||'').trim(),vat_id:(d.vat_id||'').replace(/\s/g,'').toUpperCase(),
+      first_name:(d.first_name||'').trim(),last_name:(d.last_name||'').trim(),phone:(d.phone||'').trim(),emails:d.emails.map(x=>x.trim()).filter(Boolean),
+      street:(d.street||'').trim(),street2:(d.street2||'').trim(),zip:(d.zip||'').trim(),city:(d.city||'').trim(),country:d.country||'DE',language:d.language||'de',
+      payment_days:d.payment_days===''?0:Math.max(0,Math.round(+d.payment_days)),leitweg_id:(d.leitweg_id||'').trim(),lodging_exempt:!!d.lodging_exempt,lodging_exempt_note:(d.lodging_exempt_note||'').trim(),notes:d.notes||''};
+    if(row.kind==='company'&&!row.company_name){toast('Bitte den Firmennamen eintragen.');return}
+    if(row.kind==='private'&&!row.last_name){toast('Bitte den Nachnamen eintragen.');return}
+    if(row.emails.some(m=>!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m))){toast('Bitte die E-Mail-Adressen prüfen.');return}
+    if(row.lodging_exempt&&!row.lodging_exempt_note){toast('Bitte den Grund der Befreiung eintragen.');return}
+    saveBtn.disabled=true;
+    const res=id?await sb.from('customers').update(row).eq('id',id).select():await sb.from('customers').insert(row).select();
+    saveBtn.disabled=false;
+    if(res.error||!res.data?.length){toast(res.error?.code==='23505'?'Diese Kundennummer gibt es schon.':'Speichern hat nicht geklappt'+(res.error?': '+res.error.message:'.'));return}
+    const saved=res.data[0];
+    const ix=customers.findIndex(c=>c.id===saved.id);if(ix>=0)customers[ix]=saved;else customers.push(saved);
+    toast(id?'Kunde gespeichert':'Kunde angelegt');
+    if(onSaved){onSaved(saved);return}
+    closeDrawer();render();
+  });
+  const delBtn=id&&!used?el('button',{class:'btn danger',onclick:()=>confirmBox.replaceChildren(el('div',{class:'confirm'},el('span',{text:'Kunde wirklich löschen?'}),
+    el('button',{class:'btn small danger',onclick:async()=>{const {error}=await sb.from('customers').delete().eq('id',id);if(error){toast('Löschen hat nicht geklappt.');return}customers=customers.filter(c=>c.id!==id);closeDrawer();toast('Kunde gelöscht');render()}},'Löschen'),
+    el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')))},'Löschen'):null;
+  const footer=el('footer',{},ro?el('span',{class:'ro-note grow',text:'Lesemodus'}):delBtn,el('span',{class:'grow'}),
+    el('button',{class:'btn',onclick:onSaved?()=>onSaved(null):closeDrawer},'Abbrechen'),ro?null:saveBtn);
+  showDrawer(id?custName(c0):'Neuer Kunde',body,footer);
+  if(!ro&&!id)setTimeout(()=>$('#c-company')?.focus(),50);
+}
+
+/* --- Rechnung: Berechnung --- */
+function lodgingApplies(periodEnd){return !!bset&&!!periodEnd&&periodEnd>=bset.lodging_tax_since}
+function calcInvoice(lines,o){
+  const rows=lines.filter(l=>l.kind!=='abgabe').map(l=>({...l,qty:+l.qty||0,price:+l.price||0,vat:+l.vat||0}));
+  rows.forEach(l=>l.amount=r2(l.qty*l.price));
+  let lodging=0,base=0;
+  if(o.lodging&&!o.exempt){
+    base=r2(rows.filter(l=>LINE_KINDS[l.kind]?.base).reduce((s,l)=>s+l.amount*(1+l.vat/100),0));
+    lodging=r2(base*(+bset.lodging_tax_rate)/100*(o.sign||1));
+    if(base&&lodging)rows.push({kind:'abgabe',text:'Beherbergungsabgabe Stadt Flensburg ('+pctTxt(bset.lodging_tax_rate)+' auf '+num2(Math.abs(base))+' € Übernachtungsentgelt brutto)',qty:1,price:lodging,vat:+bset.lodging_tax_vat,amount:lodging,base});
+  }
+  const byRate={};rows.forEach(l=>{byRate[l.vat]=(byRate[l.vat]||0)+l.amount});
+  const rates=Object.keys(byRate).map(Number).sort((a,b)=>a-b).map(rate=>({rate,net:r2(byRate[rate]),vat:r2(byRate[rate]*rate/100)}));
+  const net=r2(rates.reduce((s,x)=>s+x.net,0)),vat=r2(rates.reduce((s,x)=>s+x.vat,0));
+  return{lines:rows,rates,net,vat,total:r2(net+vat),lodging,base};
+}
+function defaultLines(b,from,to){
+  if(!b||!from||!to||to<from)return[{kind:'night',text:'Übernachtungen',qty:'',price:'',vat:7}];
+  const nights=diff(from,to)+1,p=+b.price||0,pers=+b.persons||0;
+  switch(b.priceModel){
+    case'pp_night':return[{kind:'night',text:'Übernachtungen ('+pers+' Personen × '+nights+' Nächte)',qty:nights*pers,price:p,vat:7}];
+    case'unit_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:p,vat:7}];
+    default:return[{kind:'night',text:'Übernachtungen ('+(b.priceModel==='pp_month'?pers+' Personen, ':'')+nights+' Nächte, Monatspreis anteilig)',qty:nights,price:r2(perNight(b)),vat:7}];
+  }
+}
+function matchCustomer(company){return customers.find(c=>sameCo(custName(c),company))||null}
+function customerSnapshot(c){return c?{id:c.id,customer_no:c.customer_no,kind:c.kind,name:custName(c),company_name:c.company_name,first_name:c.first_name,last_name:c.last_name,
+  street:c.street,street2:c.street2,zip:c.zip,city:c.city,country:c.country,tax_number:c.tax_number,vat_id:c.vat_id,emails:c.emails,leitweg_id:c.leitweg_id,language:c.language}:null}
+
+/* --- Rechnung schreiben --- */
+let invDraft=null;
+function openInvoiceDrawer(preset){
+  if(!billingReady){toast('Bitte zuerst SQL 08 in Supabase ausführen.');return}
+  if(!canWrite){toast('Nur mit Bearbeitungsrechten möglich.');return}
+  const b=preset.bookingId?bookings.find(x=>x.id===preset.bookingId):null;
+  let from='',to='';
+  if(b){from=b.invoicedUntil&&b.invoicedUntil>=b.start?addDays(b.invoicedUntil,1):b.start;
+    const ld=lastDay(b),monthEnd=addDays(addMonths(from,1),-1);
+    to=ld&&ld>=from&&ld<=addDays(from,62)?ld:minD(monthEnd,ld&&ld>=from?ld:monthEnd)}
+  const c=b?matchCustomer(b.company):null;
+  invDraft={bookingId:b?.id||'',unitId:b?.unitId||(SU()[0]||UNITS[0]).id,customerId:c?.id||'',from,to,
+    lines:defaultLines(b,from,to),payDays:c?c.payment_days:(bset?.default_payment_days??3),exempt:!!c?.lodging_exempt,exemptNote:c?.lodging_exempt_note||'',notes:'',
+    ...(preset.draft||{})};
+  drawInvoiceDrawer();
+}
+function drawInvoiceDrawer(){
+  const d=invDraft;editing={id:null,invoiceNew:true};
+  const owner=()=>UNIT[d.unitId]?.owner;
+  const iss=()=>issuers[owner()];
+  const bookingSel=el('select',{id:'iv-booking'},el('option',{value:'',text:'Ohne Buchung'}),
+    allowedBuildings().map(bld=>{const opts=bld.units.flatMap(([uid,label])=>SB().filter(x=>x.unitId===uid&&x.state!=='reserved').sort((a,c)=>a.start<c.start?1:-1).slice(0,12)
+      .map(x=>el('option',{value:x.id,text:(label==='Wohnung'?'':label+' · ')+(x.company||'Ohne Firma')+' · '+fmt(x.start)+' – '+endTxt(x)+(billing(x).days?' · '+billing(x).days+' N. offen':'')})));
+      return opts.length?el('optgroup',{label:bld.name},...opts):null}).filter(Boolean));
+  bookingSel.value=d.bookingId;
+  bookingSel.addEventListener('change',()=>{const keep={notes:d.notes};openInvoiceDrawer({bookingId:bookingSel.value||null,draft:bookingSel.value?keep:{bookingId:'',unitId:d.unitId,customerId:d.customerId,from:d.from,to:d.to,lines:d.lines,...keep}})});
+  const unitSel=el('select',{id:'iv-unit'},allowedBuildings().map(bld=>el('optgroup',{label:bld.name},bld.units.map(([uid,label])=>el('option',{value:uid,text:label})))));
+  unitSel.value=d.unitId;unitSel.disabled=!!d.bookingId;unitSel.addEventListener('change',()=>{d.unitId=unitSel.value;upd()});
+  const custSel=el('select',{id:'iv-cust'},el('option',{value:'',text:'Kunde wählen …'}),customers.slice().sort((a,c)=>custName(a).localeCompare(custName(c),'de')).map(c=>el('option',{value:c.id,text:custName(c)+(c.city?' · '+c.city:'')})));
+  custSel.value=d.customerId;
+  custSel.addEventListener('change',()=>{d.customerId=custSel.value;const c=customers.find(x=>x.id===d.customerId);if(c){d.payDays=c.payment_days;d.exempt=!!c.lodging_exempt;d.exemptNote=c.lodging_exempt_note||'';payIn.value=d.payDays;exCb.checked=d.exempt;exNote.value=d.exemptNote}upd()});
+  const bk=bookings.find(x=>x.id===d.bookingId);
+  const newCust=el('button',{type:'button',class:'btn small',onclick:()=>{
+    openCustomerDrawer(null,{company_name:bk?.company||''},saved=>{if(saved){d.customerId=saved.id;d.payDays=saved.payment_days;d.exempt=!!saved.lodging_exempt;d.exemptNote=saved.lodging_exempt_note||''}drawInvoiceDrawer()})}},'+ Neuer Kunde');
+  const custHint=el('div',{class:'hint'});
+  const fromIn=el('input',{id:'iv-from',type:'date',value:d.from}),toIn=el('input',{id:'iv-to',type:'date',value:d.to});
+  const perHint=el('div',{class:'hint'});
+  const refill=el('button',{type:'button',class:'btn small',onclick:()=>{d.lines=defaultLines(bk,d.from,d.to).concat(d.lines.filter(l=>l.kind!=='night'));drawLines();upd()}},'Nächte neu berechnen');
+  fromIn.addEventListener('input',()=>{d.from=fromIn.value;upd()});toIn.addEventListener('input',()=>{d.to=toIn.value;upd()});
+  const linesBox=el('div',{class:'lines'});
+  function drawLines(){
+    linesBox.replaceChildren(el('div',{class:'lines-head'},el('span',{text:'Art'}),el('span',{text:'Beschreibung'}),el('span',{text:'Menge'}),el('span',{text:'Einzelpreis netto'}),el('span',{text:'USt.'}),el('span')),
+      ...d.lines.map((l,ix)=>{
+        const kind=selectEl('',Object.entries(LINE_KINDS).map(([k,v])=>[k,v.label]),l.kind,v=>{const was=LINE_KINDS[l.kind];l.kind=v;l.vat=LINE_KINDS[v].vat;if(!l.text||l.text===was?.text)l.text=LINE_KINDS[v].text;drawLines();upd()});
+        const txt=el('input',{value:l.text||'',placeholder:'Beschreibung','aria-label':'Beschreibung'});txt.addEventListener('input',()=>{l.text=txt.value});
+        const qty=el('input',{type:'number',step:'any',inputmode:'decimal',value:l.qty,placeholder:'Menge','aria-label':'Menge'});qty.addEventListener('input',()=>{l.qty=qty.value;upd()});
+        const pr=el('input',{type:'number',step:'0.01',inputmode:'decimal',value:l.price,placeholder:'Preis netto','aria-label':'Einzelpreis netto'});pr.addEventListener('input',()=>{l.price=pr.value;upd()});
+        const vat=selectEl('',[['7','7 %'],['19','19 %'],['0','0 %']],String(l.vat),v=>{l.vat=+v;upd()});
+        const del=el('button',{type:'button',class:'btn small',title:'Position entfernen','aria-label':'Position entfernen',onclick:()=>{d.lines.splice(ix,1);drawLines();upd()}},'✕');
+        return el('div',{class:'line'},kind,txt,qty,pr,vat,del,el('div',{class:'amt num','data-ix':ix}));
+      }),
+      el('div',{class:'quick'},
+        el('button',{type:'button',class:'btn small',onclick:()=>{d.lines.push({kind:'cleaning',text:'Endreinigung',qty:1,price:'',vat:19});drawLines();upd()}},'+ Endreinigung'),
+        el('button',{type:'button',class:'btn small',onclick:()=>{d.lines.push({kind:'repair',text:'Reparatur',qty:1,price:'',vat:19});drawLines();upd()}},'+ Reparatur'),
+        el('button',{type:'button',class:'btn small',onclick:()=>{d.lines.push({kind:'other',text:'',qty:1,price:'',vat:19});drawLines();upd()}},'+ Position'),
+        bk?refill:null));
+  }
+  const exCb=el('input',{type:'checkbox',id:'iv-ex'});exCb.checked=d.exempt;
+  const exNote=el('input',{id:'iv-exnote',value:d.exemptNote,placeholder:'Grund, z. B. Dauerwohnsitz – Nachweis liegt vor'});
+  const exWrap=el('div',{hidden:!d.exempt},exNote);
+  exCb.addEventListener('change',()=>{d.exempt=exCb.checked;exWrap.hidden=!d.exempt;upd()});exNote.addEventListener('input',()=>d.exemptNote=exNote.value);
+  const lodgeBox=el('div',{style:'display:grid;gap:6px'},el('label',{class:'check',for:'iv-ex'},exCb,el('span',{text:'Diese Rechnung ist von der Beherbergungsabgabe befreit'})),exWrap);
+  const payIn=el('input',{id:'iv-pay',type:'number',min:'0',max:'120',step:'1',inputmode:'numeric',value:d.payDays});payIn.addEventListener('input',()=>{d.payDays=payIn.value===''?0:+payIn.value;upd()});
+  const payHint=el('div',{class:'hint'});
+  const notes=el('textarea',{id:'iv-notes',placeholder:'Erscheint auf der Rechnung unter den Summen (optional)'});notes.value=d.notes;notes.addEventListener('input',()=>d.notes=notes.value);
+  const sum=el('div',{class:'sumbox'});
+  const warn=el('div');
+  function upd(){
+    const c=customers.find(x=>x.id===d.customerId);
+    custHint.textContent=c?[c.street,[c.zip,c.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')||'Adresse fehlt noch':(bk&&!matchCustomer(bk.company)?'„'+bk.company+'“ ist noch nicht als Kunde angelegt.':'');
+    custHint.className='hint'+(c&&!c.street?' bad':'');
+    perHint.textContent=d.from&&d.to&&d.to>=d.from?(diff(d.from,d.to)+1)+' Nächte (letzte Nacht einschließlich)'+(bk&&bk.invoicedUntil&&d.from<=bk.invoicedUntil?' · Achtung: bis '+fmt(bk.invoicedUntil)+' ist schon abgerechnet':''):'Zeitraum der Leistung';
+    perHint.className='hint'+(bk&&bk.invoicedUntil&&d.from&&d.from<=bk.invoicedUntil?' bad':'');
+    payHint.textContent=+d.payDays?'fällig am '+fmt(addDays(TODAY,+d.payDays)):'sofort fällig';
+    const lod=lodgingApplies(d.to);lodgeBox.hidden=!lod;
+    const r=calcInvoice(d.lines,{lodging:lod,exempt:d.exempt});
+    linesBox.querySelectorAll('.amt').forEach(a=>{const l=d.lines[+a.dataset.ix];a.textContent=l&&l.qty!==''&&l.price!==''?'= '+eur2(r2((+l.qty||0)*(+l.price||0)))+' netto':''});
+    const rows=[];
+    if(r.lodging)rows.push(el('div',{},el('span',{text:'Beherbergungsabgabe '+pctTxt(bset.lodging_tax_rate)+' auf '+eur2(r.base)}),el('b',{text:eur2(r.lodging)})));
+    rows.push(el('div',{},el('span',{text:'Nettobetrag'}),el('b',{text:eur2(r.net)})));
+    r.rates.forEach(x=>rows.push(el('div',{},el('span',{text:'USt. '+pctTxt(x.rate)+' auf '+eur2(x.net)}),el('b',{text:eur2(x.vat)}))));
+    rows.push(el('div',{class:'tot'},el('span',{text:'Gesamtsumme'}),el('b',{text:eur2(r.total)})));
+    sum.replaceChildren(...rows);
+    const w=[];
+    if(!iss()||!iss().name||!iss().iban)w.push('Für '+owner()+' fehlen noch Absenderdaten (Einstellungen).');
+    if(lod&&!d.exempt&&r.lodging)w.push('Der USt-Satz auf die Beherbergungsabgabe ('+pctTxt(bset.lodging_tax_vat)+') ist noch mit dem Steuerberater zu klären – änderbar in den Einstellungen.');
+    warn.replaceChildren(...w.map(t=>el('div',{class:'warnbox',text:t,style:'margin-bottom:6px'})));
+    nextNo.textContent=iss()?'Nächste Nummer: '+previewNumber(iss()):'';
+  }
+  const nextNo=el('div',{class:'meta'});
+  drawLines();
+  const confirmBox=el('div');
+  const prevBtn=el('button',{class:'btn'},'Vorschau');
+  prevBtn.addEventListener('click',async()=>{const inv=buildDraftInvoice(true);if(!inv)return;prevBtn.disabled=true;try{openPdfBlob(await buildInvoicePdf(inv))}catch(e){toast('Vorschau ging nicht: '+e.message)}prevBtn.disabled=false});
+  const createBtn=el('button',{class:'btn primary'},'Rechnung erstellen');
+  createBtn.addEventListener('click',()=>{const inv=buildDraftInvoice(false);if(!inv)return;
+    confirmBox.replaceChildren(el('div',{class:'confirm',style:'background:var(--accent-soft);color:var(--fg)'},
+      el('span',{text:'Rechnung über '+eur2(inv.total)+' an '+inv.customer+' erstellen? Sie bekommt die Nummer '+previewNumber(iss())+' und kann danach nur noch storniert werden.'}),
+      el('button',{class:'btn small primary',onclick:async e=>{e.target.disabled=true;await createInvoice(inv)}},'Ja, erstellen'),
+      el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')))});
+  const body=el('div',{class:'body'},warn,
+    fld('iv-booking','Buchung',bookingSel,el('div',{class:'hint',text:'Aus der Buchung kommen Wohnung, Zeitraum und Preis. „Rechnung geschrieben bis“ wird danach automatisch gesetzt.'})),
+    el('div',{class:'two'},fld('iv-unit','Wohnung',unitSel,el('div',{class:'hint',text:'Absender: '+(owner()||'—')})),
+      el('div',{class:'field'},el('label',{for:'iv-cust',text:'Kunde'}),custSel,el('div',{class:'quick'},newCust),custHint)),
+    el('div',{class:'two'},fld('iv-from','Leistung von',fromIn),fld('iv-to','bis (letzter Tag)',toIn,perHint)),
+    el('div',{class:'sec',text:'Positionen'}),linesBox,
+    lodgeBox,
+    sum,
+    el('div',{class:'two'},fld('iv-pay','Zahlungsziel (Tage)',payIn,payHint),el('div')),
+    fld('iv-notes','Hinweis auf der Rechnung',notes),
+    nextNo,confirmBox);
+  const footer=el('footer',{},el('button',{class:'btn',onclick:closeDrawer},'Abbrechen'),el('span',{class:'grow'}),prevBtn,createBtn);
+  showDrawer('Neue Rechnung',body,footer,true);
+  upd();
+}
+function previewNumber(iss){if(!iss)return'';const y=+TODAY.slice(0,4);const n=iss.number_year===y?iss.next_no:1;return iss.number_prefix+y+'-'+String(n).padStart(iss.number_digits||3,'0')}
+function buildDraftInvoice(preview){
+  const d=invDraft;const c=customers.find(x=>x.id===d.customerId);
+  const owner=UNIT[d.unitId]?.owner, iss=issuers[owner];
+  if(!preview){
+    if(!c){toast('Bitte einen Kunden wählen.');return null}
+    if(!c.street||!c.zip||!c.city){toast('Beim Kunden fehlt die vollständige Rechnungsadresse.');return null}
+    if(!iss||!iss.name||!iss.street||!iss.iban||!(iss.tax_number||iss.vat_id)){toast('Absenderdaten für '+owner+' unvollständig (Einstellungen).');return null}
+  }
+  if(!d.from||!d.to||d.to<d.from){toast('Bitte den Leistungszeitraum prüfen.');return null}
+  const lines=d.lines.filter(l=>l.kind!=='abgabe');
+  if(!lines.length||lines.some(l=>l.qty===''||l.price===''||!+l.qty||!(l.text||'').trim())){toast('Bitte alle Positionen mit Beschreibung, Menge und Preis ausfüllen.');return null}
+  const lod=lodgingApplies(d.to);
+  if(lod&&d.exempt&&!(d.exemptNote||'').trim()){toast('Bitte den Grund der Befreiung von der Abgabe eintragen.');return null}
+  const r=calcInvoice(lines,{lodging:lod,exempt:d.exempt});
+  const first=r.lines.find(l=>l.kind==='night')||r.lines[0];
+  const payDays=Math.max(0,Math.round(+d.payDays||0));
+  return{number:preview?'ENTWURF':previewNumber(iss),invoice_date:TODAY,due_date:addDays(TODAY,payDays),payment_days:payDays,
+    issuer:owner,issuer_snapshot:iss||{name:owner},customer:custName(c)||'Kunde',customer_id:c?.id||'',customer_snapshot:customerSnapshot(c)||{name:'Kunde'},
+    unit_id:d.unitId,location_text:locText(d.unitId),period_start:d.from,period_end:d.to,booking_id:d.bookingId||'',
+    quantity:first?.qty??null,unit_price:first?.price??null,vat_rate:first?.vat??null,net:r.net,vat:r.vat,total:r.total,
+    lines:r.lines,lodging_tax:lod&&!d.exempt?r.lodging:null,lodging_exempt:lod&&d.exempt,lodging_exempt_note:lod&&d.exempt?d.exemptNote.trim():null,
+    notes:(d.notes||'').trim(),interest_note:bset?.interest_note||'',is_storno:false,preview};
+}
+async function createInvoice(inv){
+  const payload={...inv};delete payload.number;delete payload.preview;delete payload.interest_note;delete payload.invoice_date;delete payload.due_date;delete payload.issuer_snapshot;
+  const {data,error}=await sb.rpc('create_invoice',{p:payload});
+  if(error||!data){toast('Rechnung konnte nicht erstellt werden: '+(error?.message||'unbekannter Fehler'));closeDrawer();await loadBookings();return}
+  const row=data;
+  const ok=await storeInvoicePdf(row);
+  if(inv.booking_id){const b=bookings.find(x=>x.id===inv.booking_id);
+    if(b&&(!b.invoicedUntil||b.invoicedUntil<inv.period_end)){
+      const upd={invoiced_until:inv.period_end};
+      if(endOf(b)!==FAR&&inv.period_end>lastDay(b)){if(b.endOriginal)upd.extended_until=inv.period_end;else upd.end_original=inv.period_end}
+      const {error:be}=await sb.from('bookings').update(upd).eq('id',b.id);if(be)toast('Rechnung erstellt, aber „Rechnung geschrieben bis“ konnte nicht gesetzt werden.')}}
+  await loadBookings();
+  toast('Rechnung '+row.number+' erstellt'+(ok?'':' – PDF bitte erneut erzeugen'));
+  openInvoiceDetail(row.id);
+}
+async function storeInvoicePdf(row){
+  try{
+    const bytes=await buildInvoicePdf({...row,interest_note:bset?.interest_note||''});
+    const path=row.invoice_date.slice(0,4)+'/'+String(row.number).replace(/[^A-Za-z0-9._-]/g,'_')+'.pdf';
+    const up=await sb.storage.from('rechnungen').upload(path,new Blob([bytes],{type:'application/pdf'}),{contentType:'application/pdf',upsert:false});
+    if(up.error)throw up.error;
+    const {error}=await sb.from('invoices').update({file_path:path}).eq('id',row.id);
+    if(error)throw error;
+    return true;
+  }catch(e){console.error(e);return false}
+}
+
+/* --- Rechnung ansehen: PDF, bezahlt, Storno --- */
+async function openInvoiceDetail(id){
+  const i=invoices.find(x=>x.id===id);if(!i)return;
+  editing={id:null,invoiceDetail:id};
+  const st=invStatus(i);
+  let url=null;
+  if(i.file_path){const {data}=await sb.storage.from('rechnungen').createSignedUrl(i.file_path,3600);url=data?.signedUrl||null}
+  if(editing?.invoiceDetail!==id)return;
+  const cs=i.customer_snapshot||{};
+  const dl=el('dl',{},
+    el('dt',{text:'Datum'}),el('dd',{class:'num',text:fmt(i.invoice_date)}),
+    el('dt',{text:'Fällig'}),el('dd',{class:'num',text:i.due_date?fmt(i.due_date):'—'}),
+    el('dt',{text:'Zeitraum'}),el('dd',{class:'num',text:fmt(i.period_start)+' – '+fmt(i.period_end)}),
+    el('dt',{text:'Wohnung'}),el('dd',{text:i.unit_id?unitName(i.unit_id):(i.location_text||'—')}),
+    i.issuer?el('dt',{text:'Absender'}):null,i.issuer?el('dd',{text:i.issuer}):null,
+    cs.street?el('dt',{text:'Adresse'}):null,cs.street?el('dd',{text:[cs.street,cs.street2,[cs.zip,cs.city].join(' ')].filter(Boolean).join(', ')}):null,
+    el('dt',{text:'Netto / USt.'}),el('dd',{class:'num',text:(i.net!=null?eur2(+i.net):'—')+' / '+(i.vat!=null?eur2(+i.vat):'—')}),
+    i.lodging_tax!=null?el('dt',{text:'Beherb.-Abgabe'}):null,i.lodging_tax!=null?el('dd',{class:'num',text:eur2(+i.lodging_tax)}):null,
+    i.lodging_exempt?el('dt',{text:'Abgabe'}):null,i.lodging_exempt?el('dd',{text:'befreit – '+(i.lodging_exempt_note||'')}):null,
+    i.cancels?el('dt',{text:'Storniert'}):null,i.cancels?el('dd',{text:'Rechnung '+i.cancels}):null);
+  const summary=el('div',{class:'invsum'},el('div',{class:'h'},el('span',{text:(i.is_storno?'Storno ':'Nr. ')+i.number+' · '+(i.customer||'')}),el('span',{class:'num',text:i.total!=null?eur2(+i.total):''})),dl);
+  const linesView=Array.isArray(i.lines)&&i.lines.length?el('div',{class:'invlist'},i.lines.map(l=>el('span',{class:'row'},el('span',{text:(+l.qty).toLocaleString('de-DE')+' × '+(l.text||'')+' ('+pctTxt(l.vat)+')'}),el('b',{text:eur2(+l.amount)})))):null;
+  const actions=el('div',{style:'display:grid;gap:10px'});
+  const confirmBox=el('div');
+  if(canWrite&&!i.is_storno&&st.key!=='cancelled'){
+    if(i.paid_at){
+      actions.append(el('div',{class:'quick'},el('button',{class:'btn small',onclick:async()=>{await setPaid(i,null)}},'Zahlung zurücknehmen')));
+    }else{
+      const pd=el('input',{type:'date',value:TODAY,id:'pd-date'});
+      actions.append(el('div',{class:'field'},el('label',{for:'pd-date',text:'Zahlungseingang'}),el('div',{style:'display:flex;gap:8px'},pd,el('button',{class:'btn primary',onclick:async()=>{if(!pd.value){toast('Bitte ein Datum wählen.');return}await setPaid(i,pd.value)}},'Als bezahlt markieren'))));
+    }
+    if(i.source==='tool'){
+      actions.append(el('div',{class:'quick'},el('button',{class:'btn danger small',onclick:()=>confirmBox.replaceChildren(el('div',{class:'confirm'},
+        el('span',{text:'Rechnung '+i.number+' stornieren? Es wird eine Stornorechnung mit eigener Nummer erstellt'+(i.booking_id?' und „Rechnung geschrieben bis“ zurückgesetzt':'')+'.'}),
+        el('button',{class:'btn small danger',onclick:async e=>{e.target.disabled=true;await stornoInvoice(i)}},'Stornieren'),
+        el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')))},'Stornieren')));
+    }
+  }
+  if(canWrite&&i.source==='tool'&&!i.file_path){
+    actions.append(el('div',{class:'warnbox'},el('span',{text:'Das PDF fehlt noch. '}),el('button',{class:'btn small',onclick:async e=>{e.target.disabled=true;const ok=await storeInvoicePdf(i);toast(ok?'PDF abgelegt':'PDF konnte nicht abgelegt werden');await loadBookings();openInvoiceDetail(i.id)}},'PDF erzeugen')));
+  }
+  const b=i.booking_id?bookings.find(x=>x.id===i.booking_id):null;
+  const body=el('div',{class:'body'},summary,el('div',{},el('span',{class:'pill '+st.cls,text:st.label})),linesView,
+    i.notes?el('div',{class:'hint',text:'Hinweis: '+i.notes}):null,actions,confirmBox,
+    b?el('button',{class:'btn small',style:'justify-self:start',onclick:()=>openDrawer(b.id)},'Zur Buchung: '+(b.company||'')+' · '+fmt(b.start)+' – '+endTxt(b)):null);
+  const footer=el('footer',{},url?el('a',{class:'btn',href:url,target:'_blank',rel:'noopener'},'PDF öffnen'):null,el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Schließen'));
+  showDrawer((i.is_storno?'Storno ':'Rechnung ')+i.number,body,footer);
+}
+async function setPaid(i,date){
+  const {error}=await sb.from('invoices').update({paid_at:date}).eq('id',i.id);
+  if(error){toast('Speichern hat nicht geklappt: '+error.message);return}
+  toast(date?'Als bezahlt markiert':'Zahlung zurückgenommen');await loadBookings();openInvoiceDetail(i.id);
+}
+async function stornoInvoice(i){
+  const lines=(i.lines||[]).map(l=>({...l,qty:-(+l.qty),amount:-(+l.amount)}));
+  const byRate={};lines.forEach(l=>{byRate[l.vat]=(byRate[l.vat]||0)+l.amount});
+  const net=r2(-(+i.net)),vat=r2(-(+i.vat)),total=r2(-(+i.total));
+  const payload={issuer:i.issuer,customer:i.customer,customer_id:i.customer_id||'',customer_snapshot:i.customer_snapshot,unit_id:i.unit_id,location_text:i.location_text,
+    period_start:i.period_start,period_end:i.period_end,booking_id:i.booking_id||'',quantity:i.quantity!=null?-(+i.quantity):null,unit_price:i.unit_price,vat_rate:i.vat_rate,
+    net,vat,total,lines,lodging_tax:i.lodging_tax!=null?-(+i.lodging_tax):null,lodging_exempt:!!i.lodging_exempt,lodging_exempt_note:i.lodging_exempt_note,
+    notes:'',payment_days:0,is_storno:true,cancels:i.number};
+  const {data,error}=await sb.rpc('create_invoice',{p:payload});
+  if(error||!data){toast('Storno ging nicht: '+(error?.message||''));return}
+  await storeInvoicePdf({...data,cancels_date:i.invoice_date});
+  if(i.booking_id){const b=bookings.find(x=>x.id===i.booking_id);
+    if(b){const {error:be}=await sb.from('bookings').update({invoiced_until:invoicedUntilWithout(b.id,i.number)||null}).eq('id',b.id);if(be)toast('Storno erstellt, „Rechnung geschrieben bis“ bitte prüfen.')}}
+  await loadBookings();toast('Storno '+data.number+' erstellt');openInvoiceDetail(data.id);
+}
+
+/* --- Einstellungen --- */
+function openBillingSettings(){
+  if(!billingReady||!canWrite)return;
+  editing={id:null,settings:true};
+  const s={...bset};const iss=Object.fromEntries(OWNERS.map(o=>[o,{...(issuers[o]||{id:o})}]));
+  let cur=OWNERS.find(o=>allowedOwner(o))||OWNERS[0];
+  const issBox=el('div',{style:'display:grid;gap:12px'});
+  function drawIss(){const x=iss[cur];
+    issBox.replaceChildren(
+      fld('is-name','Firmenname / Name',bind(x,'name','is-name')),fld('is-contact','Ansprechpartner (Kopfzeile)',bind(x,'contact_name','is-contact')),
+      fld('is-street','Straße',bind(x,'street','is-street')),el('div',{class:'two'},fld('is-zip','PLZ',bind(x,'zip','is-zip')),fld('is-city','Ort',bind(x,'city','is-city'))),
+      el('div',{class:'two'},fld('is-mail','E-Mail',bind(x,'email','is-mail','email')),fld('is-phone','Telefon',bind(x,'phone','is-phone'))),fld('is-web','Website',bind(x,'website','is-web')),
+      el('div',{class:'two'},fld('is-tax','Steuernummer',bind(x,'tax_number','is-tax')),fld('is-vat','USt-IdNr.',bind(x,'vat_id','is-vat'))),
+      el('div',{class:'two'},fld('is-reg','Handelsregister',bind(x,'register_no','is-reg',undefined,{placeholder:'leer lassen, wenn keins'})),fld('is-court','Registergericht',bind(x,'register_court','is-court'))),
+      el('div',{class:'two'},fld('is-bank','Bank',bind(x,'bank','is-bank')),fld('is-holder','Kontoinhaber',bind(x,'account_holder','is-holder'))),
+      el('div',{class:'two'},fld('is-iban','IBAN',bind(x,'iban','is-iban')),fld('is-bic','BIC',bind(x,'bic','is-bic'))),
+      el('div',{class:'two'},fld('is-prefix','Präfix Rechnungsnummer',bind(x,'number_prefix','is-prefix',undefined,{placeholder:'leer oder z. B. TS-'})),
+        fld('is-next','Nächste laufende Nummer',bind(x,'next_no','is-next','number',{min:'1',step:'1'}),el('div',{class:'hint',text:'Ergibt '+previewNumber({...x,number_year:+TODAY.slice(0,4)})+'. Bereits vergebene Nummern werden übersprungen.'}))));
+  }
+  const issSel=selectEl('bs-iss',OWNERS.filter(o=>allowedOwner(o)).map(o=>[o,o]),cur,v=>{cur=v;drawIss()});
+  drawIss();
+  const body=el('div',{class:'body'},
+    el('div',{class:'sec',text:'Beherbergungsabgabe Flensburg'}),
+    el('div',{class:'three'},fld('bs-rate','Satz in %',bind(s,'lodging_tax_rate','bs-rate','number',{step:'0.01'})),fld('bs-vat','USt. auf die Abgabe',selectEl('bs-vat',[['7','7 %'],['19','19 %'],['0','0 %']],String(+s.lodging_tax_vat),v=>s.lodging_tax_vat=+v)),
+      fld('bs-since','gilt für Leistungen ab',bind(s,'lodging_tax_since','bs-since','date'))),
+    el('div',{class:'hint',text:'Berechnet auf das Brutto-Entgelt aus Übernachtungen und Endreinigung (Satzung § 3). Reparaturen und sonstige Positionen zählen nicht. Der USt-Satz auf die weitergegebene Abgabe ist mit dem Steuerberater zu klären.'}),
+    el('div',{class:'sec',text:'Zahlung & Mahnwesen'}),
+    fld('bs-days','Standard-Zahlungsziel für neue Kunden (Tage)',bind(s,'default_payment_days','bs-days','number',{min:'0',step:'1'})),
+    fld('bs-int','Hinweis Verzugszinsen auf der Rechnung',(()=>{const t=el('textarea',{id:'bs-int'});t.value=s.interest_note||'';t.addEventListener('input',()=>s.interest_note=t.value);return t})()),
+    el('div',{class:'three'},fld('bs-d1','1. Mahnung nach … Tagen Verzug',bind(s,'dunning1_days','bs-d1','number',{min:'0',step:'1'})),fld('bs-d2','2. Mahnung nach … Tagen',bind(s,'dunning2_days','bs-d2','number',{min:'1',step:'1'})),
+      fld('bs-fee','Pauschale ab 2. Mahnung (€)',bind(s,'dunning2_fee','bs-fee','number',{min:'0',step:'0.01'}),el('div',{class:'hint',text:'§ 288 Abs. 5 BGB: 40 € gegenüber Firmen'}))),
+    el('div',{class:'hint',text:'Der automatische Mahnversand folgt in der nächsten Ausbaustufe; die Fristen werden hier schon festgelegt.'}),
+    el('div',{class:'sec',text:'Absender & Nummernkreis'}),fld('bs-iss','Absender',issSel),issBox);
+  const saveBtn=el('button',{class:'btn primary'},'Speichern');
+  saveBtn.addEventListener('click',async()=>{
+    saveBtn.disabled=true;
+    const sRow={lodging_tax_rate:+s.lodging_tax_rate,lodging_tax_vat:+s.lodging_tax_vat,lodging_tax_since:s.lodging_tax_since,default_payment_days:Math.max(0,Math.round(+s.default_payment_days||0)),
+      interest_note:s.interest_note||'',dunning1_days:Math.max(0,Math.round(+s.dunning1_days||0)),dunning2_days:Math.max(1,Math.round(+s.dunning2_days||1)),dunning2_fee:Math.max(0,+s.dunning2_fee||0),updated_at:new Date().toISOString()};
+    const res=[await sb.from('billing_settings').update(sRow).eq('id',1)];
+    for(const o of OWNERS.filter(allowedOwner)){const x=iss[o];if(!issuers[o])continue;
+      const keys=['name','contact_name','street','zip','city','email','phone','website','tax_number','vat_id','register_no','register_court','bank','iban','bic','account_holder','number_prefix'];
+      const row=Object.fromEntries(keys.map(k=>[k,String(x[k]??'').trim()]));row.iban=row.iban.replace(/\s/g,'').toUpperCase();row.next_no=Math.max(1,Math.round(+x.next_no||1));row.updated_at=new Date().toISOString();
+      res.push(await sb.from('issuers').update(row).eq('id',o))}
+    saveBtn.disabled=false;
+    const err=res.find(r=>r.error);if(err){toast('Speichern hat nicht geklappt: '+err.error.message);return}
+    closeDrawer();toast('Einstellungen gespeichert');await loadBookings();
+  });
+  showDrawer('Einstellungen Rechnungen',body,el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Abbrechen'),saveBtn),true);
+}
+
+/* --- PDF-Erzeugung (pdf-lib, Standardschrift Helvetica) --- */
+let pdfLibReady=null;
+function loadPdfLib(){
+  if(window.PDFLib)return Promise.resolve(window.PDFLib);
+  if(pdfLibReady)return pdfLibReady;
+  pdfLibReady=new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+    s.onload=()=>res(window.PDFLib);s.onerror=()=>{pdfLibReady=null;rej(new Error('PDF-Baustein konnte nicht geladen werden'))};document.head.append(s)});
+  return pdfLibReady;
+}
+// Helvetica kann nur WinAnsi-Zeichen; alles andere (z. B. polnische Buchstaben) wird angenähert.
+const WINANSI_EXTRA='€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
+function pdfSafe(s){return String(s??'').replace(/[\t\r]/g,' ').split('').map(ch=>{const c=ch.charCodeAt(0);
+  if(c===10||(c>=32&&c<=126)||(c>=160&&c<=255)||WINANSI_EXTRA.includes(ch))return ch;
+  const base=ch.normalize('NFD').replace(/[̀-ͯ]/g,'');const m={'ł':'l','Ł':'L','đ':'d','Đ':'D','ı':'i','ș':'s','ț':'t','Ș':'S','Ț':'T'}[ch];
+  return m||(base&&base.charCodeAt(0)<256?base:'?')}).join('')}
+async function buildInvoicePdf(inv){
+  const {PDFDocument,StandardFonts,rgb}=await loadPdfLib();
+  const doc=await PDFDocument.create();
+  const F=await doc.embedFont(StandardFonts.Helvetica),FB=await doc.embedFont(StandardFonts.HelveticaBold);
+  const is=inv.issuer_snapshot||issuers[inv.issuer]||{},cs=inv.customer_snapshot||{};
+  const storno=!!inv.is_storno;
+  doc.setTitle(pdfSafe((storno?'Stornorechnung ':'Rechnung ')+inv.number));doc.setAuthor(pdfSafe(is.name||''));doc.setCreator('Belegungsplan MA-FL');doc.setProducer('pdf-lib');try{doc.setLanguage('de-DE')}catch(e){}
+  const W=595.28,H=841.89,L=56,R=W-56;
+  const ink=rgb(.08,.16,.18),mute=rgb(.36,.44,.46),line=rgb(.82,.86,.86),acc=rgb(.114,.373,.431);
+  let page=doc.addPage([W,H]);
+  const txt=(s,x,y,o={})=>{const f=o.bold?FB:F,size=o.size||9.5,t=pdfSafe(s);let xx=x;if(o.align==='right')xx=x-f.widthOfTextAtSize(t,size);else if(o.align==='center')xx=x-f.widthOfTextAtSize(t,size)/2;page.drawText(t,{x:xx,y,size,font:f,color:o.color||ink})};
+  const wrap=(s,width,size,bold)=>{const f=bold?FB:F;const out=[];String(s??'').split('\n').forEach(par=>{let cur='';pdfSafe(par).split(' ').forEach(w=>{const t=cur?cur+' '+w:w;if(f.widthOfTextAtSize(t,size)>width&&cur){out.push(cur);cur=w}else cur=t});out.push(cur)});return out};
+  const hline=(y,x1=L,x2=R,c=line,t=.6)=>page.drawLine({start:{x:x1,y},end:{x:x2,y},thickness:t,color:c});
+  const money=n=>num2(n)+' €';
+  // Fußzeile auf jeder Seite
+  const foot=()=>{
+    const reg=[is.register_no,is.register_court].filter(Boolean).join(' · ');
+    const rows=[[is.name,[is.street,[is.zip,is.city].filter(Boolean).join(' ')].filter(Boolean).join(', '),is.email,is.phone,is.website].filter(Boolean).join('  •  '),
+      [is.tax_number?'Steuernummer '+is.tax_number:'',is.vat_id?'USt-IdNr. '+is.vat_id:'',reg].filter(Boolean).join('  •  '),
+      [is.bank,is.iban?'IBAN '+is.iban.replace(/(.{4})/g,'$1 ').trim():'',is.bic?'BIC '+is.bic:'',is.account_holder?'Kontoinhaber '+is.account_holder:''].filter(Boolean).join('  •  ')];
+    hline(66);rows.forEach((r,ix)=>txt(r,W/2,54-ix*10,{size:7.2,color:mute,align:'center'}));
+  };
+  // Kopf
+  txt(is.name||'',L,H-60,{bold:true,size:13});
+  if(is.contact_name)txt(is.contact_name,L,H-74,{size:9.5,color:mute});
+  txt([is.street,[is.zip,is.city].filter(Boolean).join(' ')].filter(Boolean).join(' • '),L,H-(is.contact_name?86:74),{size:9.5,color:mute});
+  // Empfänger
+  let y=H-160;
+  txt([is.name,is.street,[is.zip,is.city].filter(Boolean).join(' ')].filter(Boolean).join(' · '),L,y+16,{size:6.8,color:mute});
+  hline(y+12,L,L+230,line,.4);
+  const recip=[cs.kind==='private'?cs.name:cs.company_name||cs.name,cs.kind==='company'&&(cs.first_name||cs.last_name)?[cs.first_name,cs.last_name].filter(Boolean).join(' '):'',cs.street,cs.street2,[cs.zip,cs.city].filter(Boolean).join(' '),cs.country&&cs.country!=='DE'?({DK:'Dänemark',PL:'Polen',NL:'Niederlande',AT:'Österreich',RO:'Rumänien',LT:'Litauen',CZ:'Tschechien',SE:'Schweden',NO:'Norwegen'}[cs.country]||cs.country):''].filter(Boolean);
+  recip.forEach((r,ix)=>txt(r,L,y-ix*13,{size:10.5,bold:ix===0}));
+  // Rechnungsdaten rechts
+  const meta=[[storno?'Stornorechnung Nr.':'Rechnungsnummer',inv.number],['Rechnungsdatum',fmtL(inv.invoice_date)],
+    ['Leistungszeitraum',fmtL(inv.period_start)+' – '+fmtL(inv.period_end)],
+    storno?null:['Fällig',!inv.due_date||inv.due_date===inv.invoice_date?'sofort':fmtL(inv.due_date)],
+    cs.customer_no?['Kundennummer',cs.customer_no]:null,cs.vat_id?['Ihre USt-IdNr.',cs.vat_id]:cs.tax_number?['Ihre Steuernummer',cs.tax_number]:null].filter(Boolean);
+  let my=H-150;meta.forEach(([a,b])=>{txt(a,R-205,my,{size:9,color:mute});txt(b,R,my,{size:9,bold:a.startsWith('Rech')||a.startsWith('Storno'),align:'right'});my-=14});
+  // Titel
+  y=Math.min(y-recip.length*13,my)-34;
+  txt(storno?'Stornorechnung':'Rechnung',L,y,{bold:true,size:19,color:acc});
+  y-=18;txt(fmtL(inv.period_start)+' – '+fmtL(inv.period_end)+(inv.location_text?'  ·  '+inv.location_text:''),L,y,{size:10.5});
+  if(storno&&inv.cancels){y-=14;txt('Storno zu Rechnung '+inv.cancels+(inv.cancels_date?' vom '+fmtL(inv.cancels_date):''),L,y,{size:10,color:mute})}
+  // Tabelle
+  const C={nr:L,desc:L+26,qty:R-205,price:R-130,vat:R-70,amt:R};
+  const tableHead=()=>{y-=26;txt('Nr.',C.nr,y,{size:8.5,bold:true,color:mute});txt('Beschreibung',C.desc,y,{size:8.5,bold:true,color:mute});txt('Menge',C.qty,y,{size:8.5,bold:true,color:mute,align:'right'});
+    txt('Einzelpreis',C.price,y,{size:8.5,bold:true,color:mute,align:'right'});txt('USt.',C.vat,y,{size:8.5,bold:true,color:mute,align:'right'});txt('Betrag netto',C.amt,y,{size:8.5,bold:true,color:mute,align:'right'});y-=7;hline(y,L,R,ink,.7)};
+  const newPage=()=>{foot();page=doc.addPage([W,H]);y=H-60;txt((storno?'Stornorechnung ':'Rechnung ')+inv.number+' – Fortsetzung',L,y,{size:9,color:mute});tableHead()};
+  tableHead();
+  (inv.lines||[]).forEach((l,ix)=>{
+    const dl=wrap(l.text||'',C.qty-C.desc-50,9.5);
+    if(y-14*dl.length<170)newPage();
+    y-=15;txt(String(ix+1),C.nr,y);dl.forEach((t,k)=>txt(t,C.desc,y-k*12));
+    txt((+l.qty).toLocaleString('de-DE',{maximumFractionDigits:2}),C.qty,y,{align:'right'});
+    txt(money(+l.price),C.price,y,{align:'right'});txt(pctTxt(l.vat),C.vat,y,{align:'right'});txt(money(+l.amount),C.amt,y,{align:'right'});
+    y-=(dl.length-1)*12+6;hline(y);
+  });
+  // Summen
+  const rates={};(inv.lines||[]).forEach(l=>{rates[l.vat]=(rates[l.vat]||0)+(+l.amount)});
+  const sums=[['Nettobetrag',money(+inv.net)],...Object.keys(rates).map(Number).sort((a,b)=>a-b).map(r=>['USt. '+pctTxt(r)+' auf '+money(r2(rates[r])),money(r2(rates[r]*r/100))])];
+  if(y<230)newPage();
+  y-=16;sums.forEach(([a,b])=>{txt(a,R-110,y,{align:'right',size:9.5,color:mute});txt(b,R,y,{align:'right',size:9.5});y-=14});
+  hline(y+8,R-230,R,ink,.7);y-=6;txt(storno?'Gutschrift gesamt':'Gesamtsumme',R-110,y,{align:'right',bold:true,size:11});txt(money(+inv.total),R,y,{align:'right',bold:true,size:11});
+  // Hinweise
+  y-=34;
+  const notes=[];
+  if(!storno)notes.push(!inv.due_date||inv.due_date===inv.invoice_date?'Bitte überweisen Sie den Gesamtbetrag sofort unter Angabe der Rechnungsnummer '+inv.number+' auf das unten genannte Konto.':'Bitte überweisen Sie den Gesamtbetrag bis zum '+fmtL(inv.due_date)+' unter Angabe der Rechnungsnummer '+inv.number+' auf das unten genannte Konto.');
+  else notes.push('Der Betrag wird mit der stornierten Rechnung verrechnet bzw. erstattet.');
+  if(inv.lodging_exempt)notes.push('Keine Beherbergungsabgabe: '+(inv.lodging_exempt_note||'befreit nach § 2 Abs. 3 Beherbergungsabgabesatzung Flensburg')+'.');
+  if(inv.notes)notes.push(inv.notes);
+  if(!storno&&inv.interest_note)notes.push(inv.interest_note);
+  notes.forEach(n=>{wrap(n,R-L,9.5).forEach(t=>{if(y<90){foot();page=doc.addPage([W,H]);y=H-60}txt(t,L,y,{size:9.5,color:ink});y-=13});y-=5});
+  foot();
+  const pages=doc.getPages();if(pages.length>1)pages.forEach((p,ix)=>{const t='Seite '+(ix+1)+' von '+pages.length;p.drawText(t,{x:R-F.widthOfTextAtSize(t,7.2),y:H-30,size:7.2,font:F,color:mute})});
+  if(inv.preview){page=pages[0];const t='ENTWURF';page.drawText(t,{x:W/2-FB.widthOfTextAtSize(t,90)/2+40,y:H/2-140,size:90,font:FB,color:rgb(.85,.3,.25),opacity:.12,rotate:{type:'degrees',angle:35}})}
+  return await doc.save();
+}
+function openPdfBlob(bytes){const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));const w=window.open(url,'_blank');if(!w){const a=el('a',{href:url,download:'vorschau.pdf'});document.body.append(a);a.click();a.remove()}setTimeout(()=>URL.revokeObjectURL(url),60000)}
+
 /* ===== App-Installation (Startbildschirm) ===== */
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
@@ -1484,7 +2127,9 @@ async function loadBookings(){
   if(inv.error){inv=await sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path').order('invoice_date',{ascending:false});stornoReady=false}else stornoReady=true;
   invoices=inv.error?[]:inv.data;invoicesReady=!inv.error;
   if(!depReady){const t=await sb.from('bookings').select('departure_confirmed').limit(1);depReady=!t.error}
-  bookings=data.map(fromRow);loaded=true;render();
+  bookings=data.map(fromRow);
+  await loadBilling();
+  loaded=true;render();
   if(editing&&editing.id&&!bookings.find(b=>b.id===editing.id)){closeDrawer();toast('Diese Buchung wurde gelöscht.')}
 }
 let started=null;
@@ -1509,6 +2154,7 @@ async function startApp(session){
   channel=sb.channel('bookings-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'bookings'},refresh)
     .on('postgres_changes',{event:'*',schema:'public',table:'invoices'},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'customers'},refresh)
     .subscribe();
 }
 function stopApp(){
