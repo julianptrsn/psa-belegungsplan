@@ -37,7 +37,11 @@ update public.issuers set
                                     where i.issuer = 'Torben Schmidt' and i.number ~ '^2026-\d+$'), 1))
 where id = 'Torben Schmidt';
 
--- 5) Nummernvergabe: nur innerhalb desselben Absenders auf Doppelungen prüfen
+-- 5) Standardtext auf jeder Rechnung
+alter table public.billing_settings add column if not exists standard_note text not null
+  default E'Check-In nach Absprache.\nCheck-Out bis 12:00 Uhr.';
+
+-- 6) Nummernvergabe: nur innerhalb desselben Absenders auf Doppelungen prüfen
 create or replace function public.create_invoice(p jsonb) returns public.invoices
 language plpgsql security definer set search_path = public as
 $$

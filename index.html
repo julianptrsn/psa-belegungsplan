@@ -459,7 +459,7 @@ function nightsIn(b,from,to){const s=maxD(b.start,from),e=minD(endOf(b),to);retu
 // geschätzt (Preis × Nächte) nur für Nächte, die noch keine Rechnung abdeckt.
 // Stornos und die von ihnen stornierten Rechnungen heben sich auf und zählen nirgends.
 // Rechnungen aus dem Tool: "bis" ist der Abreisetag (keine Nacht). Zervant-Importe: "bis" ist die letzte Nacht.
-const invEndExcl=i=>i.source==='tool'?i.period_end:addDays(i.period_end,1);
+const invEndExcl=i=>addDays(i.period_end,1);
 // "Rechnung geschrieben bis" = Abreisetag der Tool-Rechnung; die nächste Rechnung beginnt an diesem Tag.
 const invLastNight=i=>i.period_end;
 // Rechnungsnummern sind je Absender (PSA / Torben) eindeutig, daher immer mit Absender vergleichen.
@@ -1690,9 +1690,13 @@ function calcInvoice(lines,o){
   const net=r2(rates.reduce((s,x)=>s+x.net,0)),vat=r2(rates.reduce((s,x)=>s+x.vat,0));
   return{lines:rows,rates,net,vat,total:r2(net+vat),lodging,base};
 }
-function defaultLines(b,from,to){
-  if(!b||!from||!to||to<=from)return[{kind:'night',text:'Übernachtungen',qty:'',price:'',vat:7}];
-  const nights=diff(from,to),p=+b.price||0,pers=+b.persons||0;
+// Nächte einer Rechnung: Geht der Aufenthalt weiter (Folgerechnung), zählt der letzte Tag als Nacht (01.–30.11. = 30).
+// Reist der Gast am Enddatum ab, zählt der Abreisetag nicht (10.–17.11. = 7).
+const invNights=(from,to,dep)=>from&&to?diff(from,to)+(dep?0:1):0;
+function defaultLines(b,from,to,dep){
+  const nights=invNights(from,to,dep);
+  if(!b||nights<1)return[{kind:'night',text:'Übernachtungen',qty:'',price:'',vat:7}];
+  const p=+b.price||0,pers=+b.persons||0;
   switch(b.priceModel){
     case'pp_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(p*pers),vat:7}];
     case'unit_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:p,vat:7}];
@@ -1711,13 +1715,13 @@ function openInvoiceDrawer(preset){
   const b=preset.bookingId?bookings.find(x=>x.id===preset.bookingId):null;
   let from='',to='';
   if(b){
-    const lastTool=b.invoicedUntil&&invoices.some(i=>i.booking_id===b.id&&i.source==='tool'&&!i.is_storno&&i.period_end===b.invoicedUntil);
-    from=b.invoicedUntil&&b.invoicedUntil>=b.start?(lastTool?b.invoicedUntil:addDays(b.invoicedUntil,1)):b.start;
-    const ld=lastDay(b),dep=ld&&ld>from?ld:'',month=addMonths(from,1);
-    to=dep&&dep<=addDays(from,62)?dep:minD(month,dep||month)}
+    from=b.invoicedUntil&&b.invoicedUntil>=b.start?addDays(b.invoicedUntil,1):b.start;
+    const ld=lastDay(b),end=ld&&ld>from?ld:'',month=addDays(addMonths(from,1),-1);
+    to=end&&end<=addDays(from,62)?end:minD(month,end||month)}
+  const depart=!!b&&!!to&&to===lastDay(b)&&(!!b.departureConfirmed||!!b.endOriginal);
   const c=b?matchCustomer(b.company):null;
   invDraft={bookingId:b?.id||'',unitId:b?.unitId||(SU()[0]||UNITS[0]).id,customerId:c?.id||'',from,to,
-    lines:defaultLines(b,from,to),payDays:c?c.payment_days:(bset?.default_payment_days??3),exempt:!!c?.lodging_exempt,exemptNote:c?.lodging_exempt_note||'',notes:'',
+    depart,lines:defaultLines(b,from,to,depart),payDays:c?c.payment_days:(bset?.default_payment_days??3),exempt:!!c?.lodging_exempt,exemptNote:c?.lodging_exempt_note||'',notes:bset?.standard_note||'',
     ...(preset.draft||{})};
   drawInvoiceDrawer();
 }
@@ -1743,15 +1747,20 @@ function drawInvoiceDrawer(){
   const fromIn=el('input',{id:'iv-from',type:'date',value:d.from}),toIn=el('input',{id:'iv-to',type:'date',value:d.to});
   const perHint=el('div',{class:'hint'});
   const extHint=el('div');
-  const refill=el('button',{type:'button',class:'btn small',onclick:()=>{d.lines=defaultLines(bk,d.from,d.to).concat(d.lines.filter(l=>l.kind!=='night'));drawLines();upd()}},'Nächte neu berechnen');
-  fromIn.addEventListener('input',()=>{d.from=fromIn.value;upd()});toIn.addEventListener('input',()=>{d.to=toIn.value;upd()});
+  const refill=el('button',{type:'button',class:'btn small',onclick:()=>{d.lines=defaultLines(bk,d.from,d.to,d.depart).concat(d.lines.filter(l=>l.kind!=='night'));drawLines();upd()}},'Nächte neu berechnen');
+  const depCb=el('input',{type:'checkbox',id:'iv-dep'});depCb.checked=!!d.depart;
+  const relines=()=>{d.lines=defaultLines(bk,d.from,d.to,d.depart).concat(d.lines.filter(l=>l.kind!=='night'));drawLines();upd()};
+  depCb.addEventListener('change',()=>{d.depart=depCb.checked;bk?relines():upd()});
+  const depLabel=el('span');
+  fromIn.addEventListener('input',()=>{d.from=fromIn.value;bk?relines():upd()});
+  toIn.addEventListener('input',()=>{d.to=toIn.value;if(bk){d.depart=d.to===lastDay(bk)&&d.depart;depCb.checked=d.depart;relines()}else upd()});
   // Schnellwahl: Zeitraum ab dem ersten offenen Tag, Nächte und Abgabe werden neu berechnet, die Buchung bei Bedarf verlängert
-  const setTo=to=>{d.to=to;toIn.value=to;d.lines=defaultLines(bk,d.from,d.to).concat(d.lines.filter(l=>l.kind!=='night'));drawLines();upd()};
+  const setTo=to=>{d.to=to;toIn.value=to;d.depart=false;depCb.checked=false;relines()};
   const monthEndAfter=s=>{const n=addMonths(addDays(s,-1),1);return addDays(addMonths(n.slice(0,7)+'-01',1),-1)};
   const presets=bk?el('div',{class:'quick'},
     el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(monthEndAfter(d.from))}},'1 Monat (bis Monatsende)'),
-    el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(d.from,28))}},'4 Wochen'),
-    el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(d.from,14))}},'2 Wochen')):null;
+    el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(d.from,27))}},'4 Wochen'),
+    el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(d.from,13))}},'2 Wochen')):null;
   const linesBox=el('div',{class:'lines'});
   function drawLines(){
     linesBox.replaceChildren(el('div',{class:'lines-head'},el('span',{text:'Art'}),el('span',{text:'Beschreibung'}),el('span',{text:'Menge'}),el('span',{text:'Einzelpreis netto'}),el('span',{text:'USt.'}),el('span')),
@@ -1777,17 +1786,19 @@ function drawInvoiceDrawer(){
   const lodgeBox=el('div',{style:'display:grid;gap:6px'},el('label',{class:'check',for:'iv-ex'},exCb,el('span',{text:'Diese Rechnung ist von der Beherbergungsabgabe befreit'})),exWrap);
   const payIn=el('input',{id:'iv-pay',type:'number',min:'0',max:'120',step:'1',inputmode:'numeric',value:d.payDays});payIn.addEventListener('input',()=>{d.payDays=payIn.value===''?0:+payIn.value;upd()});
   const payHint=el('div',{class:'hint'});
-  const notes=el('textarea',{id:'iv-notes',placeholder:'Erscheint auf der Rechnung unter den Summen (optional)'});notes.value=d.notes;notes.addEventListener('input',()=>d.notes=notes.value);
+  const notes=el('textarea',{id:'iv-notes',placeholder:'Erscheint auf der Rechnung unter den Summen (optional)',rows:'3'});notes.value=d.notes;notes.addEventListener('input',()=>d.notes=notes.value);
   const sum=el('div',{class:'sumbox'});
   const warn=el('div');
   function upd(){
     const c=customers.find(x=>x.id===d.customerId);
     custHint.textContent=c?[c.street,[c.zip,c.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')||'Adresse fehlt noch':(bk&&!matchCustomer(bk.company)?'„'+bk.company+'“ ist noch nicht als Kunde angelegt.':'');
     custHint.className='hint'+(c&&!c.street?' bad':'');
-    perHint.textContent=d.from&&d.to&&d.to>d.from?diff(d.from,d.to)+' Nächte (der Abreisetag zählt nicht)'+(bk&&bk.invoicedUntil&&d.from<bk.invoicedUntil?' · Achtung: bis '+fmt(bk.invoicedUntil)+' ist schon abgerechnet':''):'Zeitraum der Leistung';
-    perHint.className='hint'+(bk&&bk.invoicedUntil&&d.from&&d.from<bk.invoicedUntil?' bad':'');
+    depLabel.textContent=d.to?'Gast reist am '+fmt(d.to)+' ab (der Abreisetag ist keine Nacht)':'Gast reist am Enddatum ab';
+    const nN=invNights(d.from,d.to,d.depart);
+    perHint.textContent=nN>0?nN+(nN===1?' Nacht':' Nächte')+(d.depart?' · Abreise am '+fmt(d.to):' · Folgerechnung ab '+fmt(addDays(d.to,1)))+(bk&&bk.invoicedUntil&&d.from<=bk.invoicedUntil?' · Achtung: bis '+fmt(bk.invoicedUntil)+' ist schon abgerechnet':''):'Zeitraum der Leistung';
+    perHint.className='hint'+(bk&&bk.invoicedUntil&&d.from&&d.from<=bk.invoicedUntil?' bad':'');
     extHint.replaceChildren();
-    if(bk&&d.from&&d.to&&d.to>d.from){const lastNight=d.to,ld=lastDay(bk);
+    if(bk&&nN>0){const lastNight=d.to,ld=lastDay(bk);
       if(ld&&lastNight>ld){
         const draft={...bk,id:'_draft',endOriginal:bk.endOriginal?bk.endOriginal:lastNight,extendedUntil:bk.endOriginal?lastNight:bk.extendedUntil};
         const ob=overbooked([...bookings.filter(x=>x.id!==bk.id),draft])[bk.unitId];
@@ -1824,7 +1835,8 @@ function drawInvoiceDrawer(){
     fld('iv-booking','Buchung',bookingSel,el('div',{class:'hint',text:'Aus der Buchung kommen Wohnung, Zeitraum und Preis. „Rechnung geschrieben bis“ wird danach automatisch gesetzt.'})),
     el('div',{class:'two'},fld('iv-unit','Wohnung',unitSel,el('div',{class:'hint',text:'Absender: '+(owner()||'—')})),
       el('div',{class:'field'},el('label',{for:'iv-cust',text:'Kunde'}),custSel,el('div',{class:'quick'},newCust),custHint)),
-    el('div',{class:'two'},fld('iv-from','Leistung von',fromIn),fld('iv-to','bis (Abreisetag)',toIn,perHint)),
+    el('div',{class:'two'},fld('iv-from','Leistung von',fromIn),fld('iv-to','bis',toIn,perHint)),
+    el('label',{class:'check',for:'iv-dep'},depCb,depLabel),
     presets,extHint,
     el('div',{class:'sec',text:'Positionen'}),linesBox,
     lodgeBox,
@@ -1845,7 +1857,7 @@ function buildDraftInvoice(preview){
     if(!c.street||!c.zip||!c.city){toast('Beim Kunden fehlt die vollständige Rechnungsadresse.');return null}
     if(!iss||!iss.name||!iss.street||!iss.iban||!(iss.tax_number||iss.vat_id)){toast('Absenderdaten für '+owner+' unvollständig (Einstellungen).');return null}
   }
-  if(!d.from||!d.to||d.to<=d.from){toast('Bitte den Leistungszeitraum prüfen: Der Abreisetag muss nach dem ersten Tag liegen.');return null}
+  if(invNights(d.from,d.to,d.depart)<1){toast('Bitte den Leistungszeitraum prüfen.');return null}
   const lines=d.lines.filter(l=>l.kind!=='abgabe');
   if(!lines.length||lines.some(l=>l.qty===''||l.price===''||!+l.qty||!(l.text||'').trim())){toast('Bitte alle Positionen mit Beschreibung, Menge und Preis ausfüllen.');return null}
   const lod=lodgingApplies(d.to);
@@ -1985,6 +1997,7 @@ function openBillingSettings(){
     el('div',{class:'hint',text:'Berechnet auf das Brutto-Entgelt aus Übernachtungen und Endreinigung (Satzung § 3). Reparaturen und sonstige Positionen zählen nicht. Der USt-Satz auf die weitergegebene Abgabe ist mit dem Steuerberater zu klären.'}),
     el('div',{class:'sec',text:'Zahlung & Mahnwesen'}),
     fld('bs-days','Standard-Zahlungsziel für neue Kunden (Tage)',bind(s,'default_payment_days','bs-days','number',{min:'0',step:'1'})),
+    fld('bs-std','Standardtext auf jeder Rechnung (z. B. Check-in/Check-out)',(()=>{const t=el('textarea',{id:'bs-std'});t.value=s.standard_note||'';t.addEventListener('input',()=>s.standard_note=t.value);return t})(),el('div',{class:'hint',text:'Wird bei jeder neuen Rechnung ins Hinweisfeld übernommen und lässt sich dort pro Rechnung ändern.'})),
     fld('bs-int','Hinweis Verzugszinsen auf der Rechnung',(()=>{const t=el('textarea',{id:'bs-int'});t.value=s.interest_note||'';t.addEventListener('input',()=>s.interest_note=t.value);return t})()),
     el('div',{class:'three'},fld('bs-d1','1. Mahnung nach … Tagen Verzug',bind(s,'dunning1_days','bs-d1','number',{min:'0',step:'1'})),fld('bs-d2','2. Mahnung nach … Tagen',bind(s,'dunning2_days','bs-d2','number',{min:'1',step:'1'})),
       fld('bs-fee','Pauschale ab 2. Mahnung (€)',bind(s,'dunning2_fee','bs-fee','number',{min:'0',step:'0.01'}),el('div',{class:'hint',text:'§ 288 Abs. 5 BGB: 40 € gegenüber Firmen'}))),
@@ -1994,7 +2007,7 @@ function openBillingSettings(){
   saveBtn.addEventListener('click',async()=>{
     saveBtn.disabled=true;
     const sRow={lodging_tax_rate:+s.lodging_tax_rate,lodging_tax_vat:+s.lodging_tax_vat,lodging_tax_since:s.lodging_tax_since,default_payment_days:Math.max(0,Math.round(+s.default_payment_days||0)),
-      interest_note:s.interest_note||'',dunning1_days:Math.max(0,Math.round(+s.dunning1_days||0)),dunning2_days:Math.max(1,Math.round(+s.dunning2_days||1)),dunning2_fee:Math.max(0,+s.dunning2_fee||0),updated_at:new Date().toISOString()};
+      interest_note:s.interest_note||'',...(s.standard_note!==undefined?{standard_note:s.standard_note||''}:{}),dunning1_days:Math.max(0,Math.round(+s.dunning1_days||0)),dunning2_days:Math.max(1,Math.round(+s.dunning2_days||1)),dunning2_fee:Math.max(0,+s.dunning2_fee||0),updated_at:new Date().toISOString()};
     const res=[await sb.from('billing_settings').update(sRow).eq('id',1)];
     for(const o of OWNERS.filter(allowedOwner)){const x=iss[o];if(!issuers[o])continue;
       const keys=['name','contact_name','street','zip','city','email','phone','website','tax_number','vat_id','register_no','register_court','bank','iban','bic','account_holder','number_prefix'];
