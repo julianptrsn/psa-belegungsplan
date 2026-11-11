@@ -2066,8 +2066,6 @@ async function buildInvoicePdf(inv){
   txt([is.street,[is.zip,is.city].filter(Boolean).join(' ')].filter(Boolean).join(' • '),L,H-(is.contact_name?86:74),{size:9.5,color:mute});
   // Empfänger
   let y=H-160;
-  txt([is.name,is.street,[is.zip,is.city].filter(Boolean).join(' ')].filter(Boolean).join(' · '),L,y+16,{size:6.8,color:mute});
-  hline(y+12,L,L+230,line,.4);
   const recip=[cs.kind==='private'?cs.name:cs.company_name||cs.name,cs.kind==='company'&&(cs.first_name||cs.last_name)?[cs.first_name,cs.last_name].filter(Boolean).join(' '):'',cs.street,cs.street2,[cs.zip,cs.city].filter(Boolean).join(' '),cs.country&&cs.country!=='DE'?({DK:'Dänemark',PL:'Polen',NL:'Niederlande',AT:'Österreich',RO:'Rumänien',LT:'Litauen',CZ:'Tschechien',SE:'Schweden',NO:'Norwegen'}[cs.country]||cs.country):''].filter(Boolean);
   recip.forEach((r,ix)=>txt(r,L,y-ix*13,{size:10.5,bold:ix===0}));
   // Rechnungsdaten rechts
