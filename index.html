@@ -1735,8 +1735,16 @@ function drawInvoiceDrawer(){
   const custHint=el('div',{class:'hint'});
   const fromIn=el('input',{id:'iv-from',type:'date',value:d.from}),toIn=el('input',{id:'iv-to',type:'date',value:d.to});
   const perHint=el('div',{class:'hint'});
+  const extHint=el('div');
   const refill=el('button',{type:'button',class:'btn small',onclick:()=>{d.lines=defaultLines(bk,d.from,d.to).concat(d.lines.filter(l=>l.kind!=='night'));drawLines();upd()}},'Nächte neu berechnen');
   fromIn.addEventListener('input',()=>{d.from=fromIn.value;upd()});toIn.addEventListener('input',()=>{d.to=toIn.value;upd()});
+  // Schnellwahl: Zeitraum ab dem ersten offenen Tag, Nächte und Abgabe werden neu berechnet, die Buchung bei Bedarf verlängert
+  const setTo=to=>{d.to=to;toIn.value=to;d.lines=defaultLines(bk,d.from,d.to).concat(d.lines.filter(l=>l.kind!=='night'));drawLines();upd()};
+  const monthEndAfter=s=>{const n=addMonths(addDays(s,-1),1);return addDays(addMonths(n.slice(0,7)+'-01',1),-1)};
+  const presets=bk?el('div',{class:'quick'},
+    el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(monthEndAfter(d.from),1))}},'1 Monat (bis Monatsende)'),
+    el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(d.from,28))}},'4 Wochen'),
+    el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(d.from,14))}},'2 Wochen')):null;
   const linesBox=el('div',{class:'lines'});
   function drawLines(){
     linesBox.replaceChildren(el('div',{class:'lines-head'},el('span',{text:'Art'}),el('span',{text:'Beschreibung'}),el('span',{text:'Menge'}),el('span',{text:'Einzelpreis netto'}),el('span',{text:'USt.'}),el('span')),
@@ -1771,6 +1779,13 @@ function drawInvoiceDrawer(){
     custHint.className='hint'+(c&&!c.street?' bad':'');
     perHint.textContent=d.from&&d.to&&d.to>d.from?diff(d.from,d.to)+' Nächte (der Abreisetag zählt nicht)'+(bk&&bk.invoicedUntil&&d.from<=bk.invoicedUntil?' · Achtung: bis '+fmt(bk.invoicedUntil)+' ist schon abgerechnet':''):'Zeitraum der Leistung';
     perHint.className='hint'+(bk&&bk.invoicedUntil&&d.from&&d.from<=bk.invoicedUntil?' bad':'');
+    extHint.replaceChildren();
+    if(bk&&d.from&&d.to&&d.to>d.from){const lastNight=addDays(d.to,-1),ld=lastDay(bk);
+      if(ld&&lastNight>ld){
+        const draft={...bk,id:'_draft',endOriginal:bk.endOriginal?bk.endOriginal:lastNight,extendedUntil:bk.endOriginal?lastNight:bk.extendedUntil};
+        const ob=overbooked([...bookings.filter(x=>x.id!==bk.id),draft])[bk.unitId];
+        const clash=ob&&ob.ids.includes('_draft')&&ob.ranges.some(r=>r.to>ld);
+        extHint.append(el('div',{class:clash?'warnbox':'hint',style:clash?'':'font-weight:600;color:var(--accent)',text:'Die Buchung wird bis '+fmt(lastNight)+' (letzte Nacht) verlängert.'+(clash?' Achtung: Dann ist die Wohnung ab '+fmt(ob.ranges.find(r=>r.to>ld).from)+' überbelegt.':'')}))}}
     payHint.textContent=+d.payDays?'fällig am '+fmt(addDays(TODAY,+d.payDays)):'sofort fällig';
     const lod=lodgingApplies(d.to);lodgeBox.hidden=!lod;
     const r=calcInvoice(d.lines,{lodging:lod,exempt:d.exempt});
@@ -1803,6 +1818,7 @@ function drawInvoiceDrawer(){
     el('div',{class:'two'},fld('iv-unit','Wohnung',unitSel,el('div',{class:'hint',text:'Absender: '+(owner()||'—')})),
       el('div',{class:'field'},el('label',{for:'iv-cust',text:'Kunde'}),custSel,el('div',{class:'quick'},newCust),custHint)),
     el('div',{class:'two'},fld('iv-from','Leistung von',fromIn),fld('iv-to','bis (Abreisetag)',toIn,perHint)),
+    presets,extHint,
     el('div',{class:'sec',text:'Positionen'}),linesBox,
     lodgeBox,
     sum,
