@@ -1686,9 +1686,9 @@ function defaultLines(b,from,to){
   if(!b||!from||!to||to<from)return[{kind:'night',text:'Übernachtungen',qty:'',price:'',vat:7}];
   const nights=diff(from,to)+1,p=+b.price||0,pers=+b.persons||0;
   switch(b.priceModel){
-    case'pp_night':return[{kind:'night',text:'Übernachtungen '+pers+' Person'+(pers===1?'':'en')+' (je '+num2(p)+' € pro Person und Nacht)',qty:nights,price:r2(p*pers),vat:7}];
+    case'pp_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(p*pers),vat:7}];
     case'unit_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:p,vat:7}];
-    default:return[{kind:'night',text:'Übernachtungen ('+(b.priceModel==='pp_month'?pers+' Personen, ':'')+nights+' Nächte, Monatspreis anteilig)',qty:nights,price:r2(perNight(b)),vat:7}];
+    default:return[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(perNight(b)),vat:7}];
   }
 }
 function matchCustomer(company){return customers.find(c=>sameCo(custName(c),company))||null}
