@@ -1,4 +1,4 @@
--- Rechnungsnummern je Absender: PSA-2026-0214 und TS-2026-0102, jeweils eigener Nummernkreis.
+-- Rechnungsnummern je Absender: PSA-2026-214 und TS-2026-102, jeweils eigener Nummernkreis.
 -- Dieselbe Nummer darf es daher je einmal bei PSA und bei Torben geben.
 -- Außerdem: Absenderdaten Torben Schmidt (aus Rechnung 2026-97). Einmal im Supabase SQL Editor ausführen.
 
@@ -23,8 +23,8 @@ create trigger invoices_set_issuer before insert or update of unit_id on public.
 alter table public.invoices drop constraint if exists invoices_number_key;
 create unique index if not exists invoices_issuer_number_key on public.invoices (coalesce(issuer,''), number);
 
--- 3) Nummernformat aus dem Tool: PSA-2026-0214 bzw. TS-2026-0102 (vierstellig, je Jahr neu ab 0001)
-update public.issuers set number_prefix = 'PSA-', number_digits = 4, number_year = 2026,
+-- 3) Nummernformat aus dem Tool: PSA-2026-214 bzw. TS-2026-102 (dreistellig, je Jahr neu ab 001)
+update public.issuers set number_prefix = 'PSA-', number_digits = 3, number_year = 2026,
   next_no = greatest(214, coalesce((select max(substring(i.number from '^2026-(\d+)$')::int)+1 from public.invoices i
                                      where i.issuer = 'PSA Immobilien' and i.number ~ '^2026-\d+$'), 1))
 where id = 'PSA Immobilien';
@@ -35,7 +35,7 @@ update public.issuers set
   street = 'Dreschbogen 22', zip = '24943', city = 'Flensburg',
   email = 'info@ma-fl.de', website = 'www.monteurapartments-fl.de',
   vat_id = 'DE814586907', bank = 'Nospa', iban = 'DE61217500000166285544', bic = 'NOLADE21NOS',
-  account_holder = 'Torben Schmidt', number_prefix = 'TS-', number_digits = 4, number_year = 2026,
+  account_holder = 'Torben Schmidt', number_prefix = 'TS-', number_digits = 3, number_year = 2026,
   next_no = greatest(102, coalesce((select max(substring(i.number from '^2026-(\d+)$')::int)+1 from public.invoices i
                                     where i.issuer = 'Torben Schmidt' and i.number ~ '^2026-\d+$'), 1))
 where id = 'Torben Schmidt';
