@@ -187,6 +187,8 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .bar .inv.ok{background:var(--ok)}
 .bar .inv.due{background:var(--warn)}
 .bar .ext{position:absolute;top:0;bottom:0;width:0;border-left:2px dotted currentColor;opacity:.7}
+.bar .dep{position:absolute;top:2px;bottom:2px;width:22px;margin-left:-11px;border-radius:5px;background:var(--today);color:#fff;display:grid;place-items:center;box-shadow:0 0 0 2px var(--surface)}
+.bar .dep svg{width:14px;height:14px}
 
 /* Bookings list */
 .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
@@ -393,7 +395,9 @@ const FAR='9999-12-31';
 // Abreise/Verlängert bis = letzter belegter Tag (einschließlich), wie auf den Rechnungen.
 // endOf() liefert intern den Tag danach, damit Nächte = diff(Anreise, endOf).
 // Eine fest zugesagte Abreise (Auszug) geht allen anderen Enddaten vor.
-const lastDay=b=>b.departureConfirmed||b.extendedUntil||b.endOriginal||b.invoicedUntil||'';
+// Belegt bis zum spätesten Datum aus Abreise/Verlängerung, bezahlter Rechnung und bestätigtem Auszug:
+// Ein bezahlter Zeitraum bleibt belegt, auch wenn die Monteure früher ausziehen.
+const lastDay=b=>[b.extendedUntil||b.endOriginal,b.invoicedUntil,b.departureConfirmed].filter(Boolean).sort().pop()||'';
 const endOf=b=>{const e=lastDay(b);return e?addDays(e,1):FAR};
 const endTxt=b=>lastDay(b)?fmt(lastDay(b)):'offen';
 const perNight=b=>{const p=+b.price||0,n=+b.persons||0;switch(b.priceModel){case'pp_night':return p*n;case'unit_night':return p;case'pp_month':return p*n/30;case'unit_month':return p/30;default:return 0}};
@@ -603,6 +607,10 @@ function utilEl(used,capN,bar){
   const raw=capN?used/capN*100:0, pct=Math.round(raw);
   return el('span',{class:'util '+utilLevel(raw),title:'Auslastung im Monat: '+used+' von '+capN+' Bettnächten'},bar?el('i',{},el('b',{style:'width:'+Math.min(100,pct)+'%'})):null,pct+' %');
 }
+// Tür-mit-Pfeil-Symbol für den Auszugstag
+function depIcon(){const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox','0 0 16 16');svg.setAttribute('aria-hidden','true');
+  const pth=document.createElementNS(ns,'path');pth.setAttribute('d','M10 2.5H3.5v11H10M7 8h7M11.5 5.5 14 8l-2.5 2.5');pth.setAttribute('fill','none');pth.setAttribute('stroke','currentColor');pth.setAttribute('stroke-width','1.8');pth.setAttribute('stroke-linecap','round');pth.setAttribute('stroke-linejoin','round');
+  svg.append(pth);return svg}
 function renderTimeline(){
   const from=tlMonth+'-01', to=addMonths(from,1), days=diff(from,to);
   $('#tl-month').textContent=new Date(toT(from)).toLocaleDateString('de-DE',{month:'long',year:'numeric',timeZone:'UTC'});
@@ -636,7 +644,7 @@ function renderTimeline(){
         const bl=billing(b);
         const bar=el('button',{class:'bar'+(b.state==='reserved'?' res':'')+''+(b.start<from?' cl-l':'')+(endOf(b)>to?' cl-r':''),
           style:'left:calc('+x+' * var(--day) + 2px);width:calc('+w+' * var(--day) - 4px);top:'+(4+b._lane*28)+'px',
-          title:(b.company||'')+' · '+(b.persons||0)+' Pers. · '+fmt(b.start)+' – '+endTxt(b)+(chgIds.has(b.id)&&!overIds.has(b.id)?' · Wechseltag '+fmt(chgIds.get(b.id).day)+': gut planen':''),
+          title:(b.company||'')+' · '+(b.persons||0)+' Pers. · '+fmt(b.start)+' – '+endTxt(b)+(b.departureConfirmed?' · Auszug '+fmt(b.departureConfirmed):'')+(chgIds.has(b.id)&&!overIds.has(b.id)?' · Wechseltag '+fmt(chgIds.get(b.id).day)+': gut planen':''),
           onclick:()=>openDrawer(b.id)},(b.company||'Ohne Firma')+' · '+(b.persons||0)+'P');
         // Abrechnungsstreifen: grün bis "abgerechnet bis", orange bis heute
         const span=e===s?1:diff(s,e);
@@ -646,6 +654,7 @@ function renderTimeline(){
           const g=pct(billedEnd);if(g>0)bar.append(el('span',{class:'inv ok',style:'width:'+g+'%'}));
           const dueTo=minD(TODAY,endOf(b));const o=pct(dueTo);if(o>g)bar.append(el('span',{class:'inv due',style:'left:'+g+'%;width:'+(o-g)+'%'}));
         }
+        if(b.departureConfirmed&&b.departureConfirmed>=s&&b.departureConfirmed<e)bar.append(el('span',{class:'dep',title:'Auszug am '+fmt(b.departureConfirmed),style:'left:calc('+((diff(s,b.departureConfirmed)+0.5)/span*100)+'%)'},depIcon()));
         if(b.extendedUntil&&b.endOriginal&&addDays(b.endOriginal,1)>s&&addDays(b.endOriginal,1)<e)bar.append(el('span',{class:'ext',title:'ursprüngliche Abreise '+fmt(b.endOriginal),style:'left:'+pct(addDays(b.endOriginal,1))+'%'}));
         cells.append(bar);
       }
@@ -773,7 +782,7 @@ async function drawDrawer(){
       el('div',{class:'two'},f('f-persons','Personen',inp('f-persons','persons','number',{min:'1',step:'1',inputmode:'numeric'}),persHint),f('f-state','Status',stateSel)),
       el('div',{class:'two'},f('f-start','Anreise',inp('f-start','start','date')),f('f-end','Abreise (letzter Tag)',inp('f-end','endOriginal','date'))),
       f('f-ext','Verlängert bis (letzter Tag)',inp('f-ext','extendedUntil','date'),endHint),
-      depReady?f('f-dep','Bestätigte Abreise (Auszug)',inp('f-dep','departureConfirmed','date'),el('div',{class:'hint',text:'Nur eintragen, wenn der Auszug fest zugesagt ist. Dann erscheint die Buchung unter „Bestätigte Abreisen“ und endet an diesem Tag.'})):null,
+      depReady?f('f-dep','Bestätigte Abreise (Auszug)',inp('f-dep','departureConfirmed','date'),el('div',{class:'hint',text:'Nur eintragen, wenn der Auszug fest zugesagt ist. Die Buchung erscheint dann unter „Bestätigte Abreisen“, und der Auszug wird im Plan markiert. Bereits abgerechnete Tage bleiben belegt.'})):null,
       el('div',{class:'two'},f('f-price','Preis',inp('f-price','price','number',{min:'0',step:'0.5',inputmode:'decimal',placeholder:'z. B. 25'})),f('f-model','Preis gilt',modelSel)),
       f('f-inv','Rechnung geschrieben bis (einschließlich)',invInput,quick),
       calc,
@@ -1132,7 +1141,7 @@ function drawInvoiceReview(file,p){
     }else{
       const b=bookings.find(x=>x.id===st.target);if(!b)return;
       const newInv=b.invoicedUntil&&b.invoicedUntil>p.periodEnd?b.invoicedUntil:p.periodEnd;
-      if(b.departureConfirmed&&p.periodEnd>b.departureConfirmed)detail.append(el('div',{class:'warnbox',text:'Die Rechnung geht bis '+fmt(p.periodEnd)+', die bestätigte Abreise ist aber '+fmt(b.departureConfirmed)+'. Bitte in der Buchung prüfen.'}));
+      if(b.departureConfirmed&&p.periodEnd>b.departureConfirmed)detail.append(el('div',{class:'hint',text:'Hinweis: Auszug ist am '+fmt(b.departureConfirmed)+', die Rechnung geht bis '+fmt(p.periodEnd)+'. Der bezahlte Zeitraum bleibt im Plan belegt.'}));
       const lines=[el('div',{class:'hint',text:'„Abgerechnet bis“: '+fmt(b.invoicedUntil)+' → '+fmt(newInv)})];
       const newEnd=newInv;
       if(endOf(b)===FAR||p.periodEnd>=endOf(b)){
