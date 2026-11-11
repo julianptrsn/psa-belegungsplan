@@ -124,6 +124,36 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .pill.ok{background:var(--ok-soft);color:var(--ok)}
 .pill.info{background:var(--accent-soft);color:var(--accent)}
 .pill.neutral{background:var(--sunk);color:var(--muted)}
+/* Statistik */
+.stats-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:28px 0 12px}
+.stats-head h2{margin:0;font-size:17px}
+.stats-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px}
+.stats-grid .st-sales{grid-row:span 2}
+@media (max-width:860px){.stats-grid{grid-template-columns:1fr}.stats-grid .st-sales{grid-row:auto}}
+.st-figs{display:flex;flex-wrap:wrap;gap:12px 36px;padding:14px 16px 0}
+.st-figs .lbl{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.st-figs .big{font-size:24px;margin-top:2px;letter-spacing:-.02em}
+.vchart{position:relative;height:240px;margin:14px 16px 12px 56px}
+.vchart .grid{position:absolute;inset:0 0 22px 0}
+.vchart .gl{position:absolute;left:0;right:0;border-top:1px solid var(--line-soft)}
+.vchart .gl span{position:absolute;right:calc(100% + 8px);top:-8px;font-family:var(--font-num);font-size:11px;color:var(--muted);white-space:nowrap}
+.vchart .gl.zero{border-top-color:var(--line)}
+.vchart .cols{position:absolute;inset:0 0 0 0;display:flex;align-items:stretch;gap:2px}
+.vchart .col{flex:1;min-width:0;display:flex;flex-direction:column;cursor:default}
+.vchart .plot{flex:1;position:relative;margin-bottom:22px}
+.vchart .bar2{position:absolute;left:18%;right:18%;bottom:0;background:var(--accent);border-radius:4px 4px 0 0;min-height:0}
+.vchart .col:hover .bar2,.vchart .col:focus .bar2{filter:brightness(1.15)}
+.vchart .col.cur .bar2{background:color-mix(in srgb,var(--accent) 55%,transparent)}
+.vchart .xl{position:absolute;bottom:0;height:18px;font-size:11px;color:var(--muted);white-space:nowrap;transform:translateX(-50%)}
+.hbars{display:grid;gap:10px;padding:14px 16px 16px}
+.hbar{display:grid;grid-template-columns:minmax(0,38%) minmax(0,1fr) 58px;align-items:center;gap:10px;font-size:13px}
+.hbar .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hbar .tr{height:10px;background:var(--sunk);border-radius:5px;overflow:hidden}
+.hbar .tr i{display:block;height:100%;background:var(--accent);border-radius:0 4px 4px 0}
+.hbar .vv{font-family:var(--font-num);font-size:12px;color:var(--muted);white-space:nowrap;text-align:right}
+#st-prod-note{padding:0 16px 14px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chart-tip{position:fixed;z-index:40;pointer-events:none;background:var(--fg);color:var(--bg);padding:6px 10px;border-radius:8px;font-size:12px;line-height:1.35;white-space:nowrap}
+.chart-tip b{font-family:var(--font-num);font-weight:500}
 .freelist{display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px}
 .chip{border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--bg);cursor:pointer}
 .chip b{font-family:var(--font-num);font-weight:500}
@@ -298,6 +328,26 @@ td .s{font-size:12px;color:var(--muted)}
       <div class="panel" id="ov-chg-panel" hidden style="grid-column:1/-1"><header><h2>Wechseltage</h2><span>Abreise und Anreise am selben Tag – Reinigung und Schlüssel gut planen</span></header><ul class="rows" id="ov-chg"></ul></div>
       <div class="panel" id="ov-over-panel" hidden style="grid-column:1/-1"><header><h2>Überbelegung</h2><span>mehr Personen als Betten</span></header><ul class="rows" id="ov-over"></ul></div>
     </div>
+    <div class="stats-head">
+      <h2>Statistik</h2>
+      <div class="seg" id="st-range" role="group" aria-label="Zeitraum">
+        <button data-r="12m" aria-pressed="true">12 Monate</button>
+        <button data-r="6m" aria-pressed="false">6 Monate</button>
+        <button data-r="30d" aria-pressed="false">30 Tage</button>
+        <button data-r="ytd" aria-pressed="false">Seit Jahresbeginn</button>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="panel st-sales"><header><h2>Verkäufe</h2><span>netto, nach Rechnungsdatum</span></header>
+        <div class="st-figs"><div><div class="lbl" id="st-range-lbl">Letzte 12 Monate</div><div class="big num" id="st-sum">—</div></div>
+          <div><div class="lbl">Diesen Monat</div><div class="big num" id="st-month">—</div></div>
+          <div><div class="lbl">Rechnungen</div><div class="big num" id="st-count">—</div></div></div>
+        <div class="vchart" id="st-chart"></div>
+      </div>
+      <div class="panel"><header><h2>Hauptkunden</h2><span id="st-cust-sub">netto</span></header><div class="hbars" id="st-cust"></div></div>
+      <div class="panel"><header><h2>Hauptprodukte und Dienstleistungen</h2><span>netto</span></header><div class="hbars" id="st-prod"></div><div id="st-prod-note"></div></div>
+    </div>
+    <div class="chart-tip" id="chart-tip" hidden></div>
   </section>
 
   <section class="view" id="view-tl" hidden>
@@ -561,6 +611,99 @@ function rowItem(b,right){
     el('div',{class:'main'},el('div',{class:'t',text:b.company||'Ohne Firma'}),el('div',{class:'s',text:unitName(b.unitId)+' · '+(b.persons||0)+' Pers.'})),
     el('div',{class:'r'},right));
 }
+/* ===== Statistik ===== */
+const posJson=p=>(p.positions||[]).map(x=>({d:(x.description||'').trim(),q:x.quantity,u:x.unitPrice,v:x.vatRate}));
+const MONTHS=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+function statWindow(){
+  const y=+TODAY.slice(0,4),m=+TODAY.slice(5,7);
+  const mStart=k=>{const t=new Date(Date.UTC(y,m-1-k,1));return t.toISOString().slice(0,10)};
+  if(statRange==='30d'){const from=addDays(TODAY,-29);return{from,to:addDays(TODAY,1),label:'Letzte 30 Tage',daily:true}}
+  if(statRange==='6m')return{from:mStart(5),to:addMonths(mStart(0),1),label:'Letzte 6 Monate'};
+  if(statRange==='ytd')return{from:y+'-01-01',to:addMonths(mStart(0),1),label:'Seit Jahresbeginn'};
+  return{from:mStart(11),to:addMonths(mStart(0),1),label:'Letzte 12 Monate'};
+}
+const invNet=i=>i.net!=null?+i.net:(i.total!=null&&i.vat!=null?+i.total-+i.vat:0);
+const niceMax=v=>{if(v<=0)return 1;const e=Math.pow(10,Math.floor(Math.log10(v)));const f=v/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e};
+const eurShort=v=>Math.abs(v)>=1000?(Math.round(v/100)/10).toLocaleString('de-DE')+' T€':Math.round(v).toLocaleString('de-DE')+' €';
+function showTip(e,html){const t=$('#chart-tip');t.replaceChildren(...html);t.hidden=false;
+  const r=(e.currentTarget||e.target).getBoundingClientRect();const w=t.offsetWidth,h=t.offsetHeight;
+  t.style.left=Math.max(8,Math.min(innerWidth-w-8,r.left+r.width/2-w/2))+'px';t.style.top=Math.max(8,r.top-h-8)+'px'}
+function hideTip(){$('#chart-tip').hidden=true}
+function renderStats(){
+  document.querySelectorAll('#st-range button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.r===statRange));
+  const w=statWindow();
+  const inv=activeInvoices().filter(i=>i.invoice_date&&inScope(i.unit_id)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
+  // Stornos ohne erfasstes Original zählen negativ mit
+  const loose=invoices.filter(i=>i.is_storno&&!invoices.some(o=>o.number===i.cancels)&&i.invoice_date&&inScope(i.unit_id)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
+  const all=[...inv,...loose];
+  const sum=all.reduce((t,i)=>t+invNet(i),0);
+  const mFrom=TODAY.slice(0,7)+'-01';
+  const month=activeInvoices().filter(i=>i.invoice_date&&inScope(i.unit_id)&&i.invoice_date>=mFrom&&i.invoice_date<=TODAY).reduce((t,i)=>t+invNet(i),0);
+  $('#st-range-lbl').textContent=w.label;$('#st-sum').textContent=eur(sum);$('#st-month').textContent=eur(month);$('#st-count').textContent=String(inv.length);
+  // Spalten
+  const buckets=[];
+  if(w.daily){for(let d=w.from;d<w.to;d=addDays(d,1))buckets.push({key:d,label:String(+d.slice(8)),long:fmt(d),v:0,n:0})}
+  else{for(let d=w.from;d<w.to;d=addMonths(d,1))buckets.push({key:d.slice(0,7),label:MONTHS[+d.slice(5,7)-1]+(buckets.length===0||d.slice(5,7)==='01'?' '+d.slice(2,4):''),long:MONTHS[+d.slice(5,7)-1]+' '+d.slice(0,4),v:0,n:0})}
+  const idx=Object.fromEntries(buckets.map((b,i)=>[b.key,i]));
+  all.forEach(i=>{const k=w.daily?i.invoice_date:i.invoice_date.slice(0,7);const b=buckets[idx[k]];if(b){b.v+=invNet(i);b.n+=i.is_storno?0:1}});
+  const top=Math.max(0,...buckets.map(b=>b.v));
+  const stepV=niceMax(Math.max(top,1)/4), max=Math.max(stepV,Math.ceil(top/stepV)*stepV);
+  const ticks=[];for(let t=0;t<=max+1e-6;t+=stepV)ticks.push(t);
+  const step=w.daily?5:buckets.length>8?2:1;
+  const chart=$('#st-chart');
+  chart.replaceChildren(
+    el('div',{class:'grid'},ticks.map(t=>el('div',{class:'gl'+(t===0?' zero':''),style:'bottom:'+(t/max*100)+'%'},el('span',{text:eurShort(t)})))),
+    el('div',{class:'cols'},buckets.map((b,i)=>{
+      const cur=w.daily?b.key===TODAY:b.key===TODAY.slice(0,7);
+      const col=el('div',{class:'col'+(cur?' cur':''),tabindex:'0','aria-label':b.long+': '+eur(b.v)},
+        el('div',{class:'plot'},el('div',{class:'bar2',style:'height:'+Math.max(0,b.v/max*100)+'%'})),
+        (i%step===0||i===buckets.length-1&&!w.daily)?el('div',{class:'xl',style:'left:'+((i+.5)/buckets.length*100)+'%',text:b.label}):null);
+      const tip=e=>showTip(e,[el('div',{text:b.long+(cur?' (laufend)':'')}),el('b',{text:eur2(b.v)}),el('div',{text:b.n+' Rechnung'+(b.n===1?'':'en')})]);
+      col.addEventListener('mouseenter',tip);col.addEventListener('focus',tip);col.addEventListener('mouseleave',hideTip);col.addEventListener('blur',hideTip);
+      return col;
+    })));
+  // x-Achsen-Beschriftungen liegen absolut im Diagramm
+  chart.querySelectorAll('.xl').forEach(x=>chart.append(x));
+  // Hauptkunden
+  const byCust={};all.forEach(i=>{const k=(i.customer||'Unbekannt').trim();byCust[k]=(byCust[k]||0)+invNet(i)});
+  hbars($('#st-cust'),Object.entries(byCust).sort((a,c)=>c[1]-a[1]).slice(0,5),'Noch keine Rechnungen in diesem Zeitraum.');
+  // Produkte aus Rechnungspositionen
+  const byProd={};let missing=0;
+  all.forEach(i=>{if(!Array.isArray(i.positions)||!i.positions.length){missing++;return}
+    i.positions.forEach(x=>{const k=x.d||'Ohne Bezeichnung';const v=(x.q!=null&&x.u!=null)?x.q*x.u:0;byProd[k]=(byProd[k]||0)+v})});
+  hbars($('#st-prod'),Object.entries(byProd).sort((a,c)=>c[1]-a[1]).slice(0,5),posReady?'Noch keine Positionsdaten in diesem Zeitraum.':'Für Produkte fehlt noch ein Datenbank-Schritt (SQL 08).');
+  const note=$('#st-prod-note');note.replaceChildren();
+  if(posReady&&missing){note.append(el('span',{text:missing+' Rechnung'+(missing===1?'':'en')+' ohne Positionsdaten.'}));
+    if(canWrite)note.append(el('button',{class:'btn small',onclick:backfillPositions},'Aus gespeicherten PDFs nachladen'))}
+}
+function hbars(box,rows,empty){
+  if(!rows.length){box.replaceChildren(el('div',{class:'empty',style:'padding:0',text:empty}));return}
+  const max=Math.max(...rows.map(r=>r[1]),1);
+  box.replaceChildren(...rows.map(([n,v])=>{
+    const r=el('div',{class:'hbar',tabindex:'0'},el('span',{class:'nm',text:n,title:n}),el('span',{class:'tr'},el('i',{style:'width:'+Math.max(0,v/max*100)+'%'})),el('span',{class:'vv',text:eurShort(v)}));
+    const tip=e=>showTip(e,[el('div',{text:n}),el('b',{text:eur2(v)})]);
+    r.addEventListener('mouseenter',tip);r.addEventListener('focus',tip);r.addEventListener('mouseleave',hideTip);r.addEventListener('blur',hideTip);
+    return r}));
+}
+async function backfillPositions(){
+  const todo=invoices.filter(i=>(!Array.isArray(i.positions)||!i.positions.length)&&i.file_path);
+  if(!todo.length){toast('Keine gespeicherten PDFs ohne Positionen gefunden.');return}
+  let ok=0,fail=0;
+  for(const [n,i] of todo.entries()){
+    toast('Lese Rechnung '+(n+1)+' von '+todo.length+' …');
+    try{
+      const {data:blob,error}=await sb.storage.from('rechnungen').download(i.file_path);
+      if(error||!blob)throw 0;
+      const p=await readInvoicePdf(blob);
+      if(!p||!(p.positions||[]).length)throw 0;
+      const {error:e2}=await sb.from('invoices').update({positions:posJson(p)}).eq('id',i.id);
+      if(e2)throw 0;ok++;
+    }catch(e){fail++}
+  }
+  toast(ok+' Rechnung'+(ok===1?'':'en')+' ergänzt'+(fail?', '+fail+' nicht lesbar':''));
+  await loadBookings();
+}
+
 function renderOverview(){
   const scopeBeds=SU().reduce((s,u)=>s+u.cap,0);
   const due=SB().map(b=>({b,bl:billing(b)})).filter(x=>x.bl.days>0).sort((a,c)=>c.bl.days-a.bl.days);
@@ -600,6 +743,7 @@ function renderOverview(){
       el('div',{class:'main'},el('div',{class:'t',text:unitName(c.unitId)}),el('div',{class:'s',text:'Abreise: '+nm(c.leave)+' · Anreise: '+nm(c.arrive)})),
       el('span',{class:'pill warn',text:fmt(c.day)+(c.day===TODAY?' · heute':' · in '+diff(TODAY,c.day)+' T.')}));
   }));
+  renderStats();
   const ob=overbooked(SB());
   const curOver=Object.entries(ob).flatMap(([id,o])=>(o.ranges||[]).filter(r=>r.to>TODAY).map(r=>({id,...r}))).sort((a,c)=>a.from<c.from?-1:1);
   $('#ov-over-panel').hidden=!curOver.length;
@@ -874,6 +1018,8 @@ $('#tl-scroll').addEventListener('scroll',()=>{$('#tl-headwrap').scrollLeft=$('#
 window.addEventListener('resize',syncHead);
 
 /* ===== Events ===== */
+document.querySelectorAll('#st-range button').forEach(b=>b.addEventListener('click',()=>{statRange=b.dataset.r;try{localStorage.setItem('mafl-stat',statRange)}catch(e){}renderStats()}));
+addEventListener('scroll',hideTip,{passive:true});
 function applyOwnerSelect(){
   const sel=$('#owner-sel');
   if(ownerSel!=='all'&&!allowedOwner(ownerSel))ownerSel='all';
@@ -996,7 +1142,8 @@ function parseInvoice(items,width){
 }
 
 /* ===== Rechnungen: PDF lesen ===== */
-let invoices=[], invoicesReady=false, stornoReady=false, depReady=false;
+let invoices=[], invoicesReady=false, stornoReady=false, depReady=false, posReady=false;
+let statRange='12m';try{const r=localStorage.getItem('mafl-stat');if(['12m','6m','30d','ytd'].includes(r))statRange=r}catch(e){}
 const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 let pdfjsReady=null;
 function loadPdfJs(){
@@ -1310,7 +1457,7 @@ async function saveStorno(file,p,st){
   if(up.error){const alt=filePath.replace('.pdf','-'+Date.now()+'.pdf');const up2=await sb.storage.from('rechnungen').upload(alt,file,{contentType:'application/pdf'});filePath=up2.error?null:alt}
   const {error}=await sb.from('invoices').insert({number:p.number,invoice_date:p.date||null,customer:p.customer,unit_id:st.unitId,location_text:p.location,
     period_start:p.periodStart,period_end:p.periodEnd,quantity:p.quantity,unit_price:p.unitPrice,vat_rate:p.vatRate,net:p.net,vat:p.vat,total:p.total,
-    booking_id:bookingId,file_path:filePath,is_storno:true,cancels:p.cancels||null});
+    booking_id:bookingId,file_path:filePath,is_storno:true,cancels:p.cancels||null,...(posReady?{positions:posJson(p)}:{})});
   if(error)throw new Error(error.code==='23505'?'Stornorechnung '+p.number+' ist schon erfasst.':'Storno konnte nicht gespeichert werden: '+error.message);
   await loadBookings();
 }
@@ -1334,7 +1481,8 @@ async function saveInvoice(file,p,st){
     if(error)throw new Error('Buchung konnte nicht aktualisiert werden: '+error.message);
   }
   const invRow={number:p.number,invoice_date:p.date||null,due_date:p.due||null,customer:p.customer,unit_id:st.unitId,location_text:p.location,
-    period_start:p.periodStart,period_end:p.periodEnd,quantity:p.quantity,unit_price:p.unitPrice,vat_rate:p.vatRate,net:p.net,vat:p.vat,total:p.total,booking_id:bookingId};
+    period_start:p.periodStart,period_end:p.periodEnd,quantity:p.quantity,unit_price:p.unitPrice,vat_rate:p.vatRate,net:p.net,vat:p.vat,total:p.total,booking_id:bookingId,
+    ...(posReady?{positions:posJson(p)}:{})};
   if(st.reassign){
     const {error}=await sb.from('invoices').update(invRow).eq('id',st.reassign);
     if(error)throw new Error('Rechnung konnte nicht neu zugeordnet werden: '+error.message);
@@ -1484,6 +1632,8 @@ async function loadBookings(){
   if(inv.error){inv=await sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path').order('invoice_date',{ascending:false});stornoReady=false}else stornoReady=true;
   invoices=inv.error?[]:inv.data;invoicesReady=!inv.error;
   if(!depReady){const t=await sb.from('bookings').select('departure_confirmed').limit(1);depReady=!t.error}
+  {const pr=await sb.from('invoices').select('id,positions');posReady=!pr.error;
+   if(!pr.error){const m=Object.fromEntries(pr.data.map(r=>[r.id,r.positions]));invoices.forEach(i=>i.positions=m[i.id]||null)}}
   bookings=data.map(fromRow);loaded=true;render();
   if(editing&&editing.id&&!bookings.find(b=>b.id===editing.id)){closeDrawer();toast('Diese Buchung wurde gelöscht.')}
 }
