@@ -460,7 +460,8 @@ function nightsIn(b,from,to){const s=maxD(b.start,from),e=minD(endOf(b),to);retu
 // Stornos und die von ihnen stornierten Rechnungen heben sich auf und zählen nirgends.
 // Rechnungen aus dem Tool: "bis" ist der Abreisetag (keine Nacht). Zervant-Importe: "bis" ist die letzte Nacht.
 const invEndExcl=i=>i.source==='tool'?i.period_end:addDays(i.period_end,1);
-const invLastNight=i=>i.source==='tool'?addDays(i.period_end,-1):i.period_end;
+// "Rechnung geschrieben bis" = Abreisetag der Tool-Rechnung; die nächste Rechnung beginnt an diesem Tag.
+const invLastNight=i=>i.period_end;
 const cancelledNumbers=()=>new Set(invoices.filter(i=>i.is_storno&&i.cancels).map(i=>i.cancels));
 const activeInvoices=()=>{const c=cancelledNumbers();return invoices.filter(i=>!i.is_storno&&!c.has(i.number))};
 function monthRevenue(from,to){
@@ -1705,8 +1706,10 @@ function openInvoiceDrawer(preset){
   if(!canWrite){toast('Nur mit Bearbeitungsrechten möglich.');return}
   const b=preset.bookingId?bookings.find(x=>x.id===preset.bookingId):null;
   let from='',to='';
-  if(b){from=b.invoicedUntil&&b.invoicedUntil>=b.start?addDays(b.invoicedUntil,1):b.start;
-    const ld=lastDay(b),dep=ld&&ld>=from?addDays(ld,1):'',month=addMonths(from,1);
+  if(b){
+    const lastTool=b.invoicedUntil&&invoices.some(i=>i.booking_id===b.id&&i.source==='tool'&&!i.is_storno&&i.period_end===b.invoicedUntil);
+    from=b.invoicedUntil&&b.invoicedUntil>=b.start?(lastTool?b.invoicedUntil:addDays(b.invoicedUntil,1)):b.start;
+    const ld=lastDay(b),dep=ld&&ld>from?ld:'',month=addMonths(from,1);
     to=dep&&dep<=addDays(from,62)?dep:minD(month,dep||month)}
   const c=b?matchCustomer(b.company):null;
   invDraft={bookingId:b?.id||'',unitId:b?.unitId||(SU()[0]||UNITS[0]).id,customerId:c?.id||'',from,to,
@@ -1742,7 +1745,7 @@ function drawInvoiceDrawer(){
   const setTo=to=>{d.to=to;toIn.value=to;d.lines=defaultLines(bk,d.from,d.to).concat(d.lines.filter(l=>l.kind!=='night'));drawLines();upd()};
   const monthEndAfter=s=>{const n=addMonths(addDays(s,-1),1);return addDays(addMonths(n.slice(0,7)+'-01',1),-1)};
   const presets=bk?el('div',{class:'quick'},
-    el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(monthEndAfter(d.from),1))}},'1 Monat (bis Monatsende)'),
+    el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(monthEndAfter(d.from))}},'1 Monat (bis Monatsende)'),
     el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(d.from,28))}},'4 Wochen'),
     el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(d.from,14))}},'2 Wochen')):null;
   const linesBox=el('div',{class:'lines'});
@@ -1777,15 +1780,15 @@ function drawInvoiceDrawer(){
     const c=customers.find(x=>x.id===d.customerId);
     custHint.textContent=c?[c.street,[c.zip,c.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')||'Adresse fehlt noch':(bk&&!matchCustomer(bk.company)?'„'+bk.company+'“ ist noch nicht als Kunde angelegt.':'');
     custHint.className='hint'+(c&&!c.street?' bad':'');
-    perHint.textContent=d.from&&d.to&&d.to>d.from?diff(d.from,d.to)+' Nächte (der Abreisetag zählt nicht)'+(bk&&bk.invoicedUntil&&d.from<=bk.invoicedUntil?' · Achtung: bis '+fmt(bk.invoicedUntil)+' ist schon abgerechnet':''):'Zeitraum der Leistung';
-    perHint.className='hint'+(bk&&bk.invoicedUntil&&d.from&&d.from<=bk.invoicedUntil?' bad':'');
+    perHint.textContent=d.from&&d.to&&d.to>d.from?diff(d.from,d.to)+' Nächte (der Abreisetag zählt nicht)'+(bk&&bk.invoicedUntil&&d.from<bk.invoicedUntil?' · Achtung: bis '+fmt(bk.invoicedUntil)+' ist schon abgerechnet':''):'Zeitraum der Leistung';
+    perHint.className='hint'+(bk&&bk.invoicedUntil&&d.from&&d.from<bk.invoicedUntil?' bad':'');
     extHint.replaceChildren();
-    if(bk&&d.from&&d.to&&d.to>d.from){const lastNight=addDays(d.to,-1),ld=lastDay(bk);
+    if(bk&&d.from&&d.to&&d.to>d.from){const lastNight=d.to,ld=lastDay(bk);
       if(ld&&lastNight>ld){
         const draft={...bk,id:'_draft',endOriginal:bk.endOriginal?bk.endOriginal:lastNight,extendedUntil:bk.endOriginal?lastNight:bk.extendedUntil};
         const ob=overbooked([...bookings.filter(x=>x.id!==bk.id),draft])[bk.unitId];
         const clash=ob&&ob.ids.includes('_draft')&&ob.ranges.some(r=>r.to>ld);
-        extHint.append(el('div',{class:clash?'warnbox':'hint',style:clash?'':'font-weight:600;color:var(--accent)',text:'Die Buchung wird bis '+fmt(lastNight)+' (letzte Nacht) verlängert.'+(clash?' Achtung: Dann ist die Wohnung ab '+fmt(ob.ranges.find(r=>r.to>ld).from)+' überbelegt.':'')}))}}
+        extHint.append(el('div',{class:clash?'warnbox':'hint',style:clash?'':'font-weight:600;color:var(--accent)',text:'Die Buchung wird bis '+fmt(lastNight)+' verlängert.'+(clash?' Achtung: Dann ist die Wohnung ab '+fmt(ob.ranges.find(r=>r.to>ld).from)+' überbelegt.':'')}))}}
     payHint.textContent=+d.payDays?'fällig am '+fmt(addDays(TODAY,+d.payDays)):'sofort fällig';
     const lod=lodgingApplies(d.to);lodgeBox.hidden=!lod;
     const r=calcInvoice(d.lines,{lodging:lod,exempt:d.exempt});
@@ -1860,7 +1863,7 @@ async function createInvoice(inv){
   const row=data;
   const ok=await storeInvoicePdf(row);
   if(inv.booking_id){const b=bookings.find(x=>x.id===inv.booking_id);
-    const lastNight=addDays(inv.period_end,-1);
+    const lastNight=inv.period_end;
     if(b&&(!b.invoicedUntil||b.invoicedUntil<lastNight)){
       const upd={invoiced_until:lastNight};
       if(endOf(b)!==FAR&&lastNight>lastDay(b)){if(b.endOriginal)upd.extended_until=lastNight;else upd.end_original=lastNight}
