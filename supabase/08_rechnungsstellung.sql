@@ -2,6 +2,17 @@
 -- fortlaufende Rechnungsnummern und Schutz geschriebener Rechnungen (GoBD).
 -- Einmal im Supabase SQL Editor ausführen.
 
+-- 0) Absicherung: falls frühere Schritte (05 Sichtbarkeit, 06 Storno) fehlen
+alter table public.invoices add column if not exists is_storno boolean not null default false;
+alter table public.invoices add column if not exists cancels text;
+do $$ begin
+  if to_regprocedure('public.can_see_unit(text)') is null then
+    create function public.can_see_unit(u text) returns boolean
+    language sql stable security definer set search_path = public as
+    'select public.is_member()';
+  end if;
+end $$;
+
 -- 1) Kunden ---------------------------------------------------------------
 create table public.customers (
   id uuid primary key default gen_random_uuid(),
@@ -141,11 +152,17 @@ end $$;
 create trigger invoices_protect before insert or update on public.invoices
   for each row execute function public.protect_tool_invoice();
 
-drop policy "Rechnungen löschen" on public.invoices;
+-- alle bisherigen Lösch-Regeln für Rechnungen entfernen (Namen je nach Stand unterschiedlich)
+do $$ declare r record; begin
+  for r in select policyname from pg_policies where schemaname='public' and tablename='invoices' and cmd='DELETE' loop
+    execute format('drop policy %I on public.invoices', r.policyname);
+  end loop;
+end $$;
 create policy "Rechnungen löschen" on public.invoices
   for delete to authenticated using (public.is_editor() and public.can_see_unit(unit_id) and source <> 'tool');
 
-drop policy "Editoren löschen Rechnungs-PDFs" on storage.objects;
+drop policy if exists "Editoren löschen Rechnungs-PDFs" on storage.objects;
+drop policy if exists "Rechnungs-PDFs löschen" on storage.objects;
 create policy "Editoren löschen Rechnungs-PDFs" on storage.objects
   for delete to authenticated using (
     bucket_id = 'rechnungen' and public.is_editor()
