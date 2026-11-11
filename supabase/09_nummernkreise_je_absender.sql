@@ -42,7 +42,10 @@ where id = 'Torben Schmidt';
 
 -- 5) Standardtext auf jeder Rechnung
 alter table public.billing_settings add column if not exists standard_note text not null
-  default E'Check-In nach Absprache.\nCheck-Out bis 12:00 Uhr.';
+  default E'Check-In nach Absprache.\nCheck-Out bis 12:00 Uhr.\nEs gilt die bei Buchung mitgeteilte Hausordnung: psaimmobilien.de/#hausordnung';
+update public.billing_settings set standard_note =
+  E'Check-In nach Absprache.\nCheck-Out bis 12:00 Uhr.\nEs gilt die bei Buchung mitgeteilte Hausordnung: psaimmobilien.de/#hausordnung'
+where standard_note = E'Check-In nach Absprache.\nCheck-Out bis 12:00 Uhr.';
 
 -- 6) Nummernvergabe: nur innerhalb desselben Absenders auf Doppelungen prüfen
 create or replace function public.create_invoice(p jsonb) returns public.invoices
