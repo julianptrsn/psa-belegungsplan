@@ -1504,7 +1504,7 @@ const parsedOwner=(p,unitId)=>unitId?UNIT[unitId].owner:(p&&p.issuer?(sameOwner(
 const findDup=(p,unitId)=>{const o=parsedOwner(p,unitId);return invoices.find(i=>i.number===p.number&&(!o||invOwner(i)===o))||null};
 // Entscheidet, ob eine Rechnung ohne Rückfrage übernommen werden kann.
 function autoPlan(p){
-  if(p&&p.number&&!p.periodStart&&p.net!=null&&!p.isStorno)return findDup(p,null)?{action:'skip',reason:'schon erfasst'}:{action:'other'};
+  if(p&&p.number&&!p.periodStart&&p.net!=null)return findDup(p,null)?{action:'skip',reason:'schon erfasst'}:{action:'other'};
   if(!(p&&p.number&&p.periodStart&&p.periodEnd&&p.periodEnd>=p.periodStart))return{action:'fail',reason:'nicht lesbar'};
   const mu=unitFromLocation(p.location,p.customer,p.periodEnd), unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
   if(findDup(p,unitId))return{action:'skip',reason:'schon erfasst'};
@@ -1613,7 +1613,7 @@ function drawInvoiceReview(file,p){
   const next=()=>{invPos++;nextInvoice()};
 
   const head=el('header',{},el('h2',{id:'d-title',text:(ok&&p.isStorno?'Stornorechnung':'Rechnung')+(ok?' '+p.number:'')+(total>1?' · '+n+' von '+total:'')}),el('button',{class:'btn small',onclick:()=>{invQueue=[];closeDrawer()},'aria-label':'Schließen'},'✕'));
-  if(!ok&&p&&p.number&&p.net!=null&&!p.isStorno){
+  if(!ok&&p&&p.number&&p.net!=null){
     const dup=findDup(p,null);
     const btn=el('button',{class:'btn primary'},'Als sonstige Rechnung ablegen');
     btn.addEventListener('click',async()=>{btn.disabled=true;try{await saveOtherInvoice(file,p);toast('Rechnung '+p.number+' abgelegt');next()}catch(e){btn.disabled=false;toast(e.message||'Ablegen hat nicht geklappt.')}});
@@ -1850,9 +1850,12 @@ async function saveOtherInvoice(file,p){
   const date=p.date||TODAY, vr=p.net?Math.round(+p.vat/+p.net*1000)/10:null;
   const title=(p.location||p.description||'Sonstige Leistung').trim();
   const pos=(p.positions||[]).filter(x=>x.quantity!=null&&x.unitPrice!=null&&x.vatRate!=null&&x.vatRate<=25);
+  // Stimmen die Positionen nicht mit dem Netto überein (z. B. negative Mengen im Storno), eine Sammelposition nehmen
+  if(pos.length&&Math.abs(pos.reduce((t,x)=>t+x.quantity*x.unitPrice,0)-(+p.net))>0.5)pos.length=0;
   const positions=pos.length?posJson({positions:pos}):[{d:title,q:1,u:+p.net,v:vr}];
   const row={number:p.number,invoice_date:date,due_date:p.due||null,customer:p.customer||'Unbekannt',unit_id:null,location_text:title,
     period_start:date,period_end:date,quantity:1,unit_price:+p.net,vat_rate:vr,net:p.net,vat:p.vat,total:p.total,booking_id:null,issuer:owner,
+    ...(p.isStorno?{is_storno:true,cancels:p.cancels||null}:{}),
     ...(posReady?{positions}:{})};
   const safe=String(p.number).replace(/[^A-Za-z0-9._-]/g,'_');
   let filePath=date.slice(0,4)+'/'+safe+'.pdf';
