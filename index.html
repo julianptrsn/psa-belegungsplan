@@ -781,12 +781,14 @@ function renderStats(){
   // Produkte aus Rechnungspositionen
   const byProd={};let missing=0;
   all.forEach(i=>{if(!Array.isArray(i.positions)||!i.positions.length){missing++;return}
-    i.positions.forEach(x=>{const k=x.d||'Ohne Bezeichnung';const v=(x.q!=null&&x.u!=null)?x.q*x.u:0;byProd[k]=(byProd[k]||0)+v})});
+    i.positions.forEach(x=>{const k=prodGroup(x.d);const v=(x.q!=null&&x.u!=null)?x.q*x.u:0;byProd[k]=(byProd[k]||0)+v})});
   hbars($('#st-prod'),Object.entries(byProd).sort((a,c)=>c[1]-a[1]).slice(0,5),posReady?'Noch keine Positionsdaten in diesem Zeitraum.':'Für Produkte fehlt noch ein Datenbank-Schritt (SQL 08).');
   const note=$('#st-prod-note');note.replaceChildren();
   if(posReady&&missing){note.append(el('span',{text:missing+' Rechnung'+(missing===1?'':'en')+' ohne Positionsdaten.'}));
     if(canWrite)note.append(el('button',{class:'btn small',onclick:backfillPositions},'Aus gespeicherten PDFs nachladen'))}
 }
+// Positionen zusammenfassen: alle Übernachtungs- und alle Reinigungspositionen jeweils als eine Gruppe
+function prodGroup(d){const t=(d||'').trim();if(/übernacht|uebernacht/i.test(t))return'Übernachtungen';if(/reinig/i.test(t))return'Reinigungen';return t||'Ohne Bezeichnung'}
 function hbars(box,rows,empty){
   if(!rows.length){box.replaceChildren(el('div',{class:'empty',style:'padding:0',text:empty}));return}
   const max=Math.max(...rows.map(r=>r[1]),1);
