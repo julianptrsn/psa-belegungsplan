@@ -462,8 +462,12 @@ function nightsIn(b,from,to){const s=maxD(b.start,from),e=minD(endOf(b),to);retu
 const invEndExcl=i=>i.source==='tool'?i.period_end:addDays(i.period_end,1);
 // "Rechnung geschrieben bis" = Abreisetag der Tool-Rechnung; die nächste Rechnung beginnt an diesem Tag.
 const invLastNight=i=>i.period_end;
-const cancelledNumbers=()=>new Set(invoices.filter(i=>i.is_storno&&i.cancels).map(i=>i.cancels));
-const activeInvoices=()=>{const c=cancelledNumbers();return invoices.filter(i=>!i.is_storno&&!c.has(i.number))};
+// Rechnungsnummern sind je Absender (PSA / Torben) eindeutig, daher immer mit Absender vergleichen.
+const invOwner=i=>i.issuer||UNIT[i.unit_id]?.owner||'';
+const invKey=(o,n)=>o+'|'+n;
+const isCancelled=(c,i)=>c.has(invKey(invOwner(i),i.number));
+const cancelledNumbers=()=>new Set(invoices.filter(i=>i.is_storno&&i.cancels).map(i=>invKey(invOwner(i),i.cancels)));
+const activeInvoices=()=>{const c=cancelledNumbers();return invoices.filter(i=>!i.is_storno&&!isCancelled(c,i))};
 function monthRevenue(from,to){
   let net=0,gross=0,est=0;
   const covered={}; // booking_id -> abgedeckte Nächte im Zeitraum
@@ -1268,8 +1272,8 @@ function drawInvoiceReview(file,p){
 /* ===== Stornorechnungen ===== */
 // "Abgerechnet bis" ohne die stornierte Rechnung: Ende der letzten noch gültigen Rechnung dieser Buchung.
 function invoicedUntilWithout(bookingId,cancelNo){
-  const c=cancelledNumbers();if(cancelNo)c.add(cancelNo);
-  const ends=invoices.filter(i=>i.booking_id===bookingId&&!i.is_storno&&!c.has(i.number)&&i.period_end).map(invLastNight).sort();
+  const c=cancelledNumbers();const bo=bookings.find(x=>x.id===bookingId);if(cancelNo)c.add(invKey(UNIT[bo?.unitId]?.owner||'',cancelNo));
+  const ends=invoices.filter(i=>i.booking_id===bookingId&&!i.is_storno&&!isCancelled(c,i)&&i.period_end).map(invLastNight).sort();
   return ends.length?ends[ends.length-1]:'';
 }
 function drawStornoReview(file,p,head,next,unitId){
@@ -1414,7 +1418,7 @@ async function fillInvoiceList(box,bookingId){
   if(paths.length){const {data}=await sb.storage.from('rechnungen').createSignedUrls(paths,3600);(data||[]).forEach(d=>{if(d.signedUrl)urls[d.path]=d.signedUrl})}
   box.replaceChildren(el('div',{class:'field'},el('label',{text:'Rechnungen ('+list.length+')'}),
     el('div',{class:'invlist'},list.map(i=>{
-      const canc=cancelledNumbers().has(i.number);
+      const canc=isCancelled(cancelledNumbers(),i);
       const kids=[el('span',{text:(i.is_storno?'Storno '+i.number+(i.cancels?' zu '+i.cancels:''):'Nr. '+i.number)+' · '+fmt(i.period_start)+' – '+fmt(i.period_end)+(canc?' · storniert':''),style:canc?'text-decoration:line-through;color:var(--muted)':''}),el('b',{text:i.total!=null?eur2(+i.total):''})];
       return urls[i.file_path]?el('a',{href:urls[i.file_path],target:'_blank',rel:'noopener',title:'PDF öffnen'},...kids):el('span',{class:'row'},...kids);
     }))));
@@ -1510,7 +1514,7 @@ async function loadBilling(){
 /* --- Status --- */
 function invStatus(i){
   if(i.is_storno)return{key:'storno',label:'Storno',cls:'neutral'};
-  if(cancelledNumbers().has(i.number))return{key:'cancelled',label:'storniert',cls:'neutral'};
+  if(isCancelled(cancelledNumbers(),i))return{key:'cancelled',label:'storniert',cls:'neutral'};
   if(i.paid_at)return{key:'paid',label:'bezahlt '+fmt(i.paid_at),cls:'ok'};
   if(i.source!=='tool')return{key:'import',label:'aus Zervant',cls:'neutral'};
   if(i.due_date&&i.due_date<TODAY){const d=diff(i.due_date,TODAY);return{key:'overdue',label:d+' T. überfällig',cls:d>=(bset?.dunning2_days??7)?'bad':'warn',days:d}}
@@ -1875,7 +1879,7 @@ async function createInvoice(inv){
 async function storeInvoicePdf(row){
   try{
     const bytes=await buildInvoicePdf({...row,interest_note:bset?.interest_note||''});
-    const path=row.invoice_date.slice(0,4)+'/'+String(row.number).replace(/[^A-Za-z0-9._-]/g,'_')+'.pdf';
+    const path=row.invoice_date.slice(0,4)+'/'+(row.issuer==='Torben Schmidt'?'TS_':'PSA_')+String(row.number).replace(/[^A-Za-z0-9._-]/g,'_')+'.pdf';
     const up=await sb.storage.from('rechnungen').upload(path,new Blob([bytes],{type:'application/pdf'}),{contentType:'application/pdf',upsert:false});
     if(up.error)throw up.error;
     const {error}=await sb.from('invoices').update({file_path:path}).eq('id',row.id);
