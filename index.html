@@ -1407,8 +1407,8 @@ function learnedUnit(location,customer,after){
 }
 // Feste Regeln für ungenaue Objektangaben in alten Zervant-Rechnungen
 const LOCATION_RULES=[
-  // „Harrisleer Straße“ ohne Hausnummer war bis Juni 2026 immer Nr. 88, 1. OG, mit 6 Personen
-  {re:/^harrisleer\s*stra(ss|ß)e\.?$/i,until:'2026-06-30',unit:'h88-1',persons:6},
+  // „Harrisleer Straße“ ohne Hausnummer war bis Juni 2026 immer Nr. 88, 1. OG, mit 8 Personen
+  {re:/^harrisleer\s*stra(ss|ß)e\.?$/i,until:'2026-06-30',unit:'h88-1',persons:8},
 ];
 const locationRule=(loc,periodEnd)=>LOCATION_RULES.find(r=>r.re.test(String(loc||'').trim())&&(!r.until||!periodEnd||periodEnd<=r.until))||null;
 // Nach Ablauf einer Regel wird nur aus späteren Zuordnungen gelernt, nicht aus denen, die die Regel gesetzt hat.
