@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<meta name="theme-color" content="#1d5f6e">
+<meta name="theme-color" content="#0B2329">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Belegung">
@@ -17,33 +17,26 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: Kopfzeile mit Kennzahlen, darunter drei Ansichten (Übersicht · Belegungsplan · Buchungen); Bearbeiten im Seitenpanel */
+/* Layout: feste Seitenleiste links, Inhalt rechts; alles schwebt als „Liquid Glass“ über einem
+   Petrol-Hintergrund mit groß und unscharf gesetztem Logo. Ein bewusst einziges, dunkles Erscheinungsbild. */
 :root{
-  --bg:#f3f5f5; --surface:#ffffff; --sunk:#e8eded; --line:#d5dddd; --line-soft:#e4eaea;
-  --fg:#13282d; --muted:#5b7076; --faint:#8a9ca0;
-  --accent:#1d5f6e; --accent-fg:#ffffff; --accent-soft:#d9eaed;
-  --bar:#2c7586; --bar-fg:#ffffff; --bar-res:#e3eef0;
-  --ok:#2f7a4c; --ok-soft:#dcefe2;
-  --warn:#b26b0b; --warn-soft:#f8e8cf;
-  --bad:#b4302a; --bad-soft:#f6dcda;
-  --weekend:#eef2f2; --today:#d7891c;
+  --petrol:#163A43; --petrol-deep:#0B2329; --gold:#E7A33E; --sea:#6FA0B0; --sand:#F5F1EA;
+  --bg:#0B2329;
+  --glass:rgba(255,255,255,.075); --glass-hi:rgba(255,255,255,.12); --glass-line:rgba(255,255,255,.14);
+  --surface:rgba(255,255,255,.075); --sunk:rgba(255,255,255,.05); --line:rgba(255,255,255,.13); --line-soft:rgba(255,255,255,.07);
+  --solid:#10303A; --solid-2:#0E2A32;
+  --fg:#EEF4F4; --muted:#A3BCC1; --faint:#6F8D93;
+  --accent:#7CCFD9; --accent-fg:#06222A; --accent-soft:rgba(124,207,217,.16);
+  --bar:#2E8C99; --bar-fg:#ffffff; --bar-res:rgba(124,207,217,.14);
+  --ok:#6BD69E; --ok-soft:rgba(107,214,158,.16);
+  --warn:#F2B552; --warn-soft:rgba(242,181,82,.16);
+  --bad:#FF8279; --bad-soft:rgba(255,130,121,.16);
+  --weekend:rgba(255,255,255,.035); --today:#E7A33E;
   --font-ui:'Archivo',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
   --font-num:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
-  --r:8px;
+  --r:10px; --side:252px;
+  color-scheme:dark;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0f1b1e; --surface:#16262a; --sunk:#1c2f34; --line:#2a4148; --line-soft:#213740;
-  --fg:#e3ecee; --muted:#9db1b6; --faint:#6e868c;
-  --accent:#6fb8c8; --accent-fg:#0d1a1d; --accent-soft:#1f3d45;
-  --bar:#3f8fa1; --bar-fg:#ffffff; --bar-res:#1f3a41;
-  --ok:#6cc48d; --ok-soft:#1d3a2a; --warn:#e7a54a; --warn-soft:#3b2e18; --bad:#ef7b74; --bad-soft:#42211f;
-  --weekend:#132327; --today:#e7a54a; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0f1b1e; --surface:#16262a; --sunk:#1c2f34; --line:#2a4148; --line-soft:#213740;
-  --fg:#e3ecee; --muted:#9db1b6; --faint:#6e868c;
-  --accent:#6fb8c8; --accent-fg:#0d1a1d; --accent-soft:#1f3d45;
-  --bar:#3f8fa1; --bar-fg:#ffffff; --bar-res:#1f3a41;
-  --ok:#6cc48d; --ok-soft:#1d3a2a; --warn:#e7a54a; --warn-soft:#3b2e18; --bad:#ef7b74; --bad-soft:#42211f;
-  --weekend:#132327; --today:#e7a54a; color-scheme:dark}
 
 *{box-sizing:border-box}
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -103,7 +96,7 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .notice b{color:var(--fg)}
 
 /* Overview */
-.ov-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,430px),1fr));gap:18px}
 @media (max-width:860px){.ov-grid{grid-template-columns:1fr}}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:0}
 .panel header{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line-soft)}
@@ -124,6 +117,38 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .pill.ok{background:var(--ok-soft);color:var(--ok)}
 .pill.info{background:var(--accent-soft);color:var(--accent)}
 .pill.neutral{background:var(--sunk);color:var(--muted)}
+/* Statistik */
+.stats-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px}
+.stats-grid{margin-bottom:22px}
+.stats-head h2{margin:0;font-size:17px}
+.stats-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px}
+.stats-grid .st-sales{grid-row:span 2;display:flex;flex-direction:column}
+.stats-grid .st-sales .vchart{flex:1;height:auto;min-height:240px}
+@media (max-width:860px){.stats-grid{grid-template-columns:1fr}.stats-grid .st-sales{grid-row:auto}}
+.st-figs{display:flex;flex-wrap:wrap;gap:12px 36px;padding:14px 16px 0}
+.st-figs .lbl{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.st-figs .big{font-size:24px;margin-top:2px;letter-spacing:-.02em}
+.vchart{position:relative;height:240px;margin:14px 16px 12px 56px}
+.vchart .grid{position:absolute;inset:0 0 22px 0}
+.vchart .gl{position:absolute;left:0;right:0;border-top:1px solid var(--line-soft)}
+.vchart .gl span{position:absolute;right:calc(100% + 8px);top:-8px;font-family:var(--font-num);font-size:11px;color:var(--muted);white-space:nowrap}
+.vchart .gl.zero{border-top-color:var(--line)}
+.vchart .cols{position:absolute;inset:0 0 0 0;display:flex;align-items:stretch;gap:2px}
+.vchart .col{flex:1;min-width:0;display:flex;flex-direction:column;cursor:default}
+.vchart .plot{flex:1;position:relative;margin-bottom:22px}
+.vchart .bar2{position:absolute;left:18%;right:18%;bottom:0;background:var(--accent);border-radius:4px 4px 0 0;min-height:0}
+.vchart .col:hover .bar2,.vchart .col:focus .bar2{filter:brightness(1.15)}
+.vchart .col.cur .bar2{background:color-mix(in srgb,var(--accent) 55%,transparent)}
+.vchart .xl{position:absolute;bottom:0;height:18px;font-size:11px;color:var(--muted);white-space:nowrap;transform:translateX(-50%)}
+.hbars{display:grid;gap:10px;padding:14px 16px 16px}
+.hbar{display:grid;grid-template-columns:minmax(0,38%) minmax(0,1fr) 58px;align-items:center;gap:10px;font-size:13px}
+.hbar .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hbar .tr{height:10px;background:var(--sunk);border-radius:5px;overflow:hidden}
+.hbar .tr i{display:block;height:100%;background:var(--accent);border-radius:0 4px 4px 0}
+.hbar .vv{font-family:var(--font-num);font-size:12px;color:var(--muted);white-space:nowrap;text-align:right}
+#st-prod-note{padding:0 16px 14px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chart-tip{position:fixed;z-index:40;pointer-events:none;background:var(--fg);color:var(--bg);padding:6px 10px;border-radius:8px;font-size:12px;line-height:1.35;white-space:nowrap}
+.chart-tip b{font-family:var(--font-num);font-weight:500}
 .freelist{display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px}
 .chip{border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--bg);cursor:pointer}
 .chip b{font-family:var(--font-num);font-weight:500}
@@ -164,6 +189,7 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .util.lv-bad{color:var(--bad);font-weight:600}.util.lv-bad i b,.meter i.lv-bad{background:var(--bad)}
 .util.lv-warn{color:var(--warn);font-weight:600}.util.lv-warn i b,.meter i.lv-warn{background:var(--warn)}
 .util.lv-ok{color:var(--ok);font-weight:600}.util.lv-ok i b,.meter i.lv-ok{background:var(--ok)}
+.kpi .sub span.lv-bad{color:var(--bad)}.kpi .sub span.lv-warn{color:var(--warn)}.kpi .sub span.lv-ok{color:var(--ok)}
 .kpi .sub.lv-bad{color:var(--bad);font-weight:600}.kpi .sub.lv-warn{color:var(--warn);font-weight:600}.kpi .sub.lv-ok{color:var(--ok);font-weight:600}
 .tl-group .util{margin-left:auto;font-weight:500}
 .tl-group .tl-lab{display:flex;align-items:center;gap:6px}
@@ -263,6 +289,109 @@ a.btn{text-decoration:none;color:inherit}
 .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 @media (max-width:600px){.three{grid-template-columns:1fr 1fr}}
 @media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+
+/* ===================== Liquid-Glass-Design ===================== */
+html{background:var(--petrol-deep)}
+body{background:
+  radial-gradient(1200px 700px at 85% -10%,rgba(111,160,176,.28),transparent 60%),
+  radial-gradient(900px 600px at -10% 110%,rgba(231,163,62,.14),transparent 60%),
+  linear-gradient(160deg,#163A43 0%,#0E2C34 45%,#0A1F25 100%) fixed;color:var(--fg);min-height:100vh}
+/* Logo mittig im Inhaltsbereich (rechts neben der Seitenleiste) */
+.bgart{position:fixed;z-index:0;pointer-events:none;width:min(88vmin,980px);aspect-ratio:1;left:calc(50% + (var(--side) + 28px) / 2);top:50%;transform:translate(-50%,-50%);filter:blur(10px) saturate(120%);opacity:.32}
+.bgart svg{width:100%;height:100%}
+#app,#auth{position:relative;z-index:1}
+/* Glas */
+.panel,.kpi,.tl-headwrap,.tl-scroll,.tbl-wrap,.side,.auth-card,.notice,.mtop,.tl-bar,.stats-head .seg,.filters .seg{
+  background:var(--glass);border:1px solid var(--glass-line);
+  -webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 12px 32px rgba(0,0,0,.22)}
+.panel,.kpi,.tbl-wrap,.notice{border-radius:18px}
+.panel header{border-bottom-color:var(--line-soft)}
+/* Seitenleiste */
+.side{position:fixed;z-index:20;left:max(14px,env(safe-area-inset-left,0px));top:calc(14px + env(safe-area-inset-top,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));width:var(--side);border-radius:22px;display:flex;flex-direction:column;gap:6px;padding:18px 14px;overflow-y:auto}
+.side-brand{display:flex;align-items:center;gap:12px;padding:2px 6px 16px}
+.mk{display:inline-flex;flex:none}
+.side-brand .mk svg{width:42px;height:42px;border-radius:12px;box-shadow:0 0 0 1px rgba(255,255,255,.18),0 6px 18px rgba(0,0,0,.3)}
+.side-brand b{display:block;font-size:15px;font-weight:750;font-stretch:108%;letter-spacing:-.01em}
+.side-brand small{display:block;font-size:12px;color:var(--muted)}
+.side-lbl{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:14px 10px 6px}
+.side-nav,.side-act{display:grid;gap:4px}
+.nav-item{display:flex;align-items:center;gap:12px;width:100%;border:1px solid transparent;background:transparent;color:var(--muted);padding:10px 12px;border-radius:12px;font-weight:600;font-size:14px;cursor:pointer;text-align:left}
+.nav-item svg{width:19px;height:19px;flex:none}
+.nav-item:hover{background:rgba(255,255,255,.06);color:var(--fg)}
+.nav-item[aria-selected="true"]{background:var(--glass-hi);border-color:var(--glass-line);color:var(--fg);box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}
+.nav-item[aria-selected="true"] svg{color:var(--gold)}
+.side-act .btn.primary{width:100%;justify-content:flex-start;gap:12px;padding:11px 12px;border-radius:12px;margin-bottom:4px}
+.side-act .btn.primary svg{width:19px;height:19px}
+.side .owner-sel{margin:0 4px;width:calc(100% - 8px);background:rgba(255,255,255,.06);border:1px solid var(--glass-line);color:var(--fg);border-radius:12px;padding:9px 10px}
+.side .owner-sel option{background:var(--solid);color:var(--fg)}
+.side-foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px 6px 2px;border-top:1px solid var(--line-soft)}
+.avatar{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-weight:750;background:linear-gradient(135deg,var(--gold),#C9822A);color:#2A1A05;flex:none}
+.who{flex:1;min-width:0}.who b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.who small{font-size:11px;color:var(--faint)}
+.iconbtn{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;border:1px solid var(--glass-line);background:rgba(255,255,255,.06);color:var(--fg);cursor:pointer;flex:none}
+.iconbtn svg{width:19px;height:19px}.iconbtn:hover{background:rgba(255,255,255,.12)}
+.iconbtn.gold{background:var(--gold);border-color:transparent;color:#2A1A05}
+/* Inhalt rechts neben der Leiste */
+#app>main.wrap{max-width:none;margin:0 0 0 calc(var(--side) + 28px);padding-top:18px;padding-right:max(20px,env(safe-area-inset-right,0px))}
+@media (min-width:1700px){.stats-grid{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}}
+@media (max-width:1180px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:861px) and (max-width:1180px){.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.stats-grid .st-sales{grid-column:1/-1;grid-row:auto}}
+.mtop,.side-scrim{display:none}
+/* Kennzahlen als einzelne Glas-Kacheln */
+.kpis{background:none;border:0;border-radius:0;gap:14px;overflow:visible;margin-top:0}
+.kpi{padding:18px 18px 16px;position:relative}
+.kpi .lbl{font-size:11px;letter-spacing:.1em}
+.kpi .val{font-size:30px;margin-top:8px}
+/* Knöpfe & Felder */
+.btn{background:rgba(255,255,255,.07);border-color:var(--glass-line);color:var(--fg);border-radius:11px}
+.btn:hover{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.22)}
+.btn.primary{background:linear-gradient(180deg,#F0B457,var(--gold));border-color:transparent;color:#2A1A05;box-shadow:0 6px 18px rgba(231,163,62,.28)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.danger{color:var(--bad);border-color:rgba(255,130,121,.35)}
+.field input,.field select,.field textarea,.search{background:rgba(255,255,255,.06);border-color:var(--glass-line);color:var(--fg);border-radius:10px}
+.field select option{background:var(--solid);color:var(--fg)}
+.seg{background:var(--glass);border-radius:12px}
+.seg button[aria-pressed="true"]{background:var(--glass-hi);color:var(--fg);box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}
+.rows li:hover,tbody tr:hover{background:rgba(255,255,255,.05)}
+.chip{background:rgba(255,255,255,.05);border-color:var(--glass-line);color:var(--fg);border-radius:10px}
+.calc{background:rgba(255,255,255,.05);border-radius:12px}
+.pill.info{background:var(--accent-soft);color:var(--accent)}
+.pill.neutral{background:rgba(255,255,255,.08);color:var(--muted)}
+/* Belegungsplan */
+.tl-bar{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--mtop,0px));border-radius:16px;padding:10px 12px;margin-bottom:8px}
+.tl-headwrap{top:calc(env(safe-area-inset-top,0px) + var(--mtop,0px) + var(--barh,52px) + 8px);border-radius:16px 16px 0 0}
+.tl-scroll{border-radius:0 0 16px 16px;border-top:0}
+.tl-head,.tl-head .tl-lab{background:var(--solid)}
+.tl-lab,.tl-row .tl-lab{background:var(--solid-2)}
+.tl-group,.tl-group .tl-lab{background:#12333C}
+.tl-group .fill{background:transparent}
+.bar{box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.bar.res{background:var(--bar-res);color:var(--fg)}
+/* Seitliches Fenster (Buchung, Rechnung, Abreise) */
+.drawer{background:rgba(12,38,45,.82);-webkit-backdrop-filter:blur(26px) saturate(150%);backdrop-filter:blur(26px) saturate(150%);border-left:1px solid var(--glass-line);box-shadow:-20px 0 50px rgba(0,0,0,.35)}
+.scrim{background:rgba(3,14,17,.45);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.invsum{border-color:var(--glass-line);border-radius:14px}.invsum .h{background:rgba(255,255,255,.06)}
+.toast{background:var(--sand);color:#10252B}
+.chart-tip{background:var(--sand);color:#10252B}
+/* Login */
+.auth-card{border-radius:22px;background:rgba(255,255,255,.09)}
+/* Statistik */
+.vchart .bar2{background:linear-gradient(180deg,#9BE0E8,var(--accent))}
+.hbar .tr i{background:linear-gradient(90deg,var(--accent),#9BE0E8)}
+/* Handy & Tablet: Leiste als ausfahrbares Menü, oben eine schmale Kopfleiste */
+@media (max-width:980px){
+  .mtop{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:15;margin:0;border-radius:0;border-width:0 0 1px;padding:10px max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px));padding-top:max(10px,env(safe-area-inset-top,0px))}
+  .mtop-brand{flex:1;display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;min-width:0}
+  .mtop-brand .mk svg{width:32px;height:32px;border-radius:9px}
+  .side{transform:translateX(calc(-100% - 30px));transition:transform .22s ease}
+  body.nav-open .side{transform:none}
+  .side-scrim{position:fixed;inset:0;z-index:19;background:rgba(3,14,17,.5)}
+  body.nav-open .side-scrim{display:block}
+  #app>main.wrap{margin:0 auto;padding-top:14px}
+  .bgart{left:50%;width:min(120vmin,760px);opacity:.38}
+  #app>main.wrap{padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+@media (prefers-reduced-motion:reduce){.side{transition:none}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 </head>
@@ -270,8 +399,8 @@ a.btn{text-decoration:none;color:inherit}
 
 <div class="auth" id="auth" hidden>
   <form class="auth-card" id="auth-form" novalidate>
-    <svg width="40" height="40" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="var(--accent)"/><path d="M10 18 17 12l7 6M12 17v7h10v-7" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="15.5" y="19" width="3" height="3" rx=".6" fill="var(--today)"/></svg>
-    <div><h1 id="auth-title">Belegungsplan</h1><p id="auth-sub">Monteur Apartments Flensburg · bitte anmelden</p></div>
+    <svg viewBox="0 0 64 64" aria-hidden="true" width="52" height="52" style="border-radius:14px;box-shadow:0 0 0 1px rgba(255,255,255,.18)"><rect width="64" height="64" rx="15" fill="#163A43"/><path d="M21 38 L32 28 L43 38" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.5 37 V47 H39.5 V37" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="29.5" y="39.5" width="5" height="5" rx="1" fill="#E7A33E"/><path d="M18 52 q3.6 -3.2 7.2 0 t7.2 0 t7.2 0 t7.2 0" fill="none" stroke="#6FA0B0" stroke-width="2.2" stroke-linecap="round"/><g transform="translate(23.8,16) scale(0.9)" fill="#F5F1EA"><ellipse cx="9.5" cy="7.3" rx="4.9" ry="2.8"/><circle cx="4.9" cy="5.2" r="2"/><path d="M3.1 5 L0.5 5.9 L3.3 6.6 Z"/><path d="M13.4 6.4 L17.8 5.1 L14 8.3 Z"/><rect x="7.1" y="9.5" width="0.85" height="3.4" rx=".3"/><rect x="9.5" y="9.5" width="0.85" height="3.4" rx=".3"/></g></svg>
+    <div><h1 id="auth-title">Belegungsplan</h1><p id="auth-sub">Monteur Apartments Flensburg · Verwaltung</p></div>
     <div class="auth-msg" id="auth-msg" hidden></div>
     <div class="field" id="auth-email-f"><label for="auth-email">E-Mail</label><input id="auth-email" type="email" autocomplete="username" required></div>
     <div class="field" id="auth-pw-f"><label for="auth-pw">Passwort</label><input id="auth-pw" type="password" autocomplete="current-password" required></div>
@@ -281,32 +410,62 @@ a.btn{text-decoration:none;color:inherit}
 </div>
 
 <div id="app" hidden>
-<header class="top">
-  <div class="wrap">
-    <div class="brand">
-      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="var(--accent)"/><path d="M10 18 17 12l7 6M12 17v7h10v-7" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="15.5" y="19" width="3" height="3" rx=".6" fill="var(--today)"/></svg>
-      <div><h1>Belegungsplan</h1><small>Monteur Apartments Flensburg · PSA Immobilien</small></div>
-    </div>
-    <select id="owner-sel" class="owner-sel" aria-label="Eigentümer"><option value="all">Alle Wohnungen</option><option>PSA Immobilien</option><option>Torben Schmidt</option></select>
-    <div class="tabs" role="tablist">
-      <button role="tab" id="tab-ov" data-view="ov" aria-selected="true">Übersicht</button>
-      <button role="tab" id="tab-tl" data-view="tl" aria-selected="false">Belegungsplan</button>
-      <button role="tab" id="tab-ls" data-view="ls" aria-selected="false">Buchungen</button>
-      <button role="tab" id="tab-rg" data-view="rg" aria-selected="false">Rechnungen</button>
-    </div>
-    <button class="btn" id="btn-dep" hidden title="Bestätigte Abreise für eine Buchung eintragen">Abreise</button>
-    <button class="btn" id="btn-inv" hidden title="Rechnungen als PDF oder Zervant-ZIP hochladen">Rechnung hochladen</button>
-    <input type="file" id="inv-file" accept="application/pdf,.pdf,application/zip,.zip" multiple hidden>
-    <button class="btn primary" id="btn-new" hidden>+ Buchung</button>
-    <div class="userbox"><span id="user-name"></span><button class="btn small" id="btn-logout">Abmelden</button></div>
-  </div>
+<div class="bgart" aria-hidden="true"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M21 38 L32 28 L43 38" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.5 37 V47 H39.5 V37" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="29.5" y="39.5" width="5" height="5" rx="1" fill="#E7A33E"/><path d="M18 52 q3.6 -3.2 7.2 0 t7.2 0 t7.2 0 t7.2 0" fill="none" stroke="#6FA0B0" stroke-width="2.2" stroke-linecap="round"/><g transform="translate(23.8,16) scale(0.9)" fill="#F5F1EA"><ellipse cx="9.5" cy="7.3" rx="4.9" ry="2.8"/><circle cx="4.9" cy="5.2" r="2"/><path d="M3.1 5 L0.5 5.9 L3.3 6.6 Z"/><path d="M13.4 6.4 L17.8 5.1 L14 8.3 Z"/><rect x="7.1" y="9.5" width="0.85" height="3.4" rx=".3"/><rect x="9.5" y="9.5" width="0.85" height="3.4" rx=".3"/></g></svg></div>
+<header class="mtop">
+  <button class="iconbtn" id="btn-menu" aria-label="Menü öffnen" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <div class="mtop-brand"><span class="mk"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#163A43"/><path d="M21 38 L32 28 L43 38" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.5 37 V47 H39.5 V37" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="29.5" y="39.5" width="5" height="5" rx="1" fill="#E7A33E"/><path d="M18 52 q3.6 -3.2 7.2 0 t7.2 0 t7.2 0 t7.2 0" fill="none" stroke="#6FA0B0" stroke-width="2.2" stroke-linecap="round"/><g transform="translate(23.8,16) scale(0.9)" fill="#F5F1EA"><ellipse cx="9.5" cy="7.3" rx="4.9" ry="2.8"/><circle cx="4.9" cy="5.2" r="2"/><path d="M3.1 5 L0.5 5.9 L3.3 6.6 Z"/><path d="M13.4 6.4 L17.8 5.1 L14 8.3 Z"/><rect x="7.1" y="9.5" width="0.85" height="3.4" rx=".3"/><rect x="9.5" y="9.5" width="0.85" height="3.4" rx=".3"/></g></svg></span><span id="page-title">Übersicht</span></div>
+  <button class="iconbtn gold" id="btn-new-m" aria-label="Neue Buchung" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
 </header>
+<aside class="side" id="side">
+  <div class="side-brand"><span class="mk"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#163A43"/><path d="M21 38 L32 28 L43 38" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.5 37 V47 H39.5 V37" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="29.5" y="39.5" width="5" height="5" rx="1" fill="#E7A33E"/><path d="M18 52 q3.6 -3.2 7.2 0 t7.2 0 t7.2 0 t7.2 0" fill="none" stroke="#6FA0B0" stroke-width="2.2" stroke-linecap="round"/><g transform="translate(23.8,16) scale(0.9)" fill="#F5F1EA"><ellipse cx="9.5" cy="7.3" rx="4.9" ry="2.8"/><circle cx="4.9" cy="5.2" r="2"/><path d="M3.1 5 L0.5 5.9 L3.3 6.6 Z"/><path d="M13.4 6.4 L17.8 5.1 L14 8.3 Z"/><rect x="7.1" y="9.5" width="0.85" height="3.4" rx=".3"/><rect x="9.5" y="9.5" width="0.85" height="3.4" rx=".3"/></g></svg></span><div><b>Monteur Apartments Flensburg</b><small>Verwaltung · PSA Immobilien</small></div></div>
+  <div class="side-lbl">Menü</div>
+  <nav class="side-nav" role="tablist" aria-label="Ansichten">
+    <button class="nav-item" role="tab" id="tab-ov" data-view="ov" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z"/></svg><span>Übersicht</span></button>
+    <button class="nav-item" role="tab" id="tab-tl" data-view="tl" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18M3 12h18M3 19h18M7 3v4M12 10v4M16 17v4"/></svg><span>Belegungsplan</span></button>
+    <button class="nav-item" role="tab" id="tab-ls" data-view="ls" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg><span>Buchungen</span></button>
+    <button class="nav-item" role="tab" id="tab-rg" data-view="rg" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4"/></svg><span>Rechnungen</span></button>
+  </nav>
+  <div class="side-lbl" id="side-act-lbl" hidden>Aktionen</div>
+  <div class="side-act">
+    <button class="btn primary" id="btn-new" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>Neue Buchung</span></button>
+    <button class="nav-item" id="btn-dep" hidden title="Bestätigte Abreise für eine Buchung eintragen"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6v18h8M10 12h11M17 8l4 4-4 4"/></svg><span>Abreise eintragen</span></button>
+    <button class="nav-item" id="btn-inv" hidden title="Rechnungen als PDF oder Zervant-ZIP hochladen"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/></svg><span>Rechnung hochladen</span></button>
+    <input type="file" id="inv-file" accept="application/pdf,.pdf,application/zip,.zip" multiple hidden>
+  </div>
+  <div class="side-lbl">Wohnungen</div>
+  <select id="owner-sel" class="owner-sel" aria-label="Eigentümer"><option value="all">Alle Wohnungen</option><option>PSA Immobilien</option><option>Torben Schmidt</option></select>
+  <div class="side-foot">
+    <span class="avatar" id="user-ini">·</span><div class="who"><b id="user-name"></b><small>angemeldet</small></div>
+    <button class="iconbtn" id="btn-logout" aria-label="Abmelden" title="Abmelden"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H4V3h5M16 17l5-5-5-5M21 12H9"/></svg></button>
+  </div>
+</aside>
+<div class="side-scrim" id="side-scrim"></div>
 
 <main class="wrap">
   <div class="kpis" id="kpis"></div>
   <div id="status-line"></div>
 
   <section class="view" id="view-ov">
+    <div class="stats-head">
+      <h2>Statistik</h2>
+      <div class="seg" id="st-range" role="group" aria-label="Zeitraum">
+        <button data-r="12m" aria-pressed="true">12 Monate</button>
+        <button data-r="6m" aria-pressed="false">6 Monate</button>
+        <button data-r="30d" aria-pressed="false">30 Tage</button>
+        <button data-r="ytd" aria-pressed="false">Seit Jahresbeginn</button>
+        <button data-r="all" aria-pressed="false">All Time</button>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="panel st-sales"><header><h2>Verkäufe</h2><span>netto, nach Rechnungsdatum</span></header>
+        <div class="st-figs"><div><div class="lbl" id="st-range-lbl">Letzte 12 Monate</div><div class="big num" id="st-sum">—</div></div>
+          <div><div class="lbl">Diesen Monat</div><div class="big num" id="st-month">—</div></div>
+          <div><div class="lbl">Rechnungen</div><div class="big num" id="st-count">—</div></div></div>
+        <div class="vchart" id="st-chart"></div>
+      </div>
+      <div class="panel"><header><h2>Hauptkunden</h2><span id="st-cust-sub">netto</span></header><div class="hbars" id="st-cust"></div></div>
+      <div class="panel"><header><h2>Hauptprodukte und Dienstleistungen</h2><span>netto</span></header><div class="hbars" id="st-prod"></div><div id="st-prod-note"></div></div>
+    </div>
     <div class="ov-grid">
       <div class="panel" id="ov-overdue-panel" hidden style="grid-column:1/-1"><header><h2>Überfällige Rechnungen</h2><span id="ov-overdue-sum"></span></header><ul class="rows" id="ov-overdue"></ul></div>
       <div class="panel"><header><h2>Abrechnung fällig</h2><span>abgelaufene Nächte ohne Rechnung</span></header><ul class="rows" id="ov-due"></ul></div>
@@ -318,6 +477,7 @@ a.btn{text-decoration:none;color:inherit}
       <div class="panel" id="ov-chg-panel" hidden style="grid-column:1/-1"><header><h2>Wechseltage</h2><span>Abreise und Anreise am selben Tag – Reinigung und Schlüssel gut planen</span></header><ul class="rows" id="ov-chg"></ul></div>
       <div class="panel" id="ov-over-panel" hidden style="grid-column:1/-1"><header><h2>Überbelegung</h2><span>mehr Personen als Betten</span></header><ul class="rows" id="ov-over"></ul></div>
     </div>
+    <div class="chart-tip" id="chart-tip" hidden></div>
   </section>
 
   <section class="view" id="view-tl" hidden>
@@ -563,7 +723,9 @@ const unitName=id=>{const u=UNIT[id];return u?(u.label==='Wohnung'?u.addr:u.addr
 
 /* ===== Rendering ===== */
 function render(){
-  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.view===view));
+  document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.setAttribute('aria-selected',b.dataset.view===view));
+  $('#page-title').textContent={ov:'Übersicht',tl:'Belegungsplan',ls:'Buchungen',rg:'Rechnungen'}[view];
+  $('#btn-new-m').hidden=!canWrite;$('#side-act-lbl').hidden=!canWrite;
   ['ov','tl','ls','rg'].forEach(v=>$('#view-'+v).hidden=v!==view);
   $('#btn-new').hidden=!canWrite;
   $('#btn-inv').hidden=!canWrite;
@@ -599,7 +761,9 @@ function renderKpis(){
   const v=(a,b)=>{const d=el('div',{class:'val'});d.append(a);if(b)d.append(el('small',{text:' '+b}));return d};
   $('#kpis').replaceChildren(
     (()=>{const raw=scopeBeds?beds/scopeBeds*100:0,lv=utilLevel(raw);const c=k('Betten belegt heute',v(String(beds),'/ '+scopeBeds),pct+' % Auslastung',el('div',{class:'meter'},el('i',{class:lv,style:'width:'+Math.min(100,pct)+'%'})));c.querySelector('.sub').classList.add(lv);return c})(),
-    k('Wohnungen belegt',v(String(units),'/ '+SU().length),(SU().length-units)+' komplett frei'),
+    (()=>{const n=SU().length,raw=n?units/n*100:0,lv=utilLevel(raw),pu=Math.round(raw);
+      const c=k('Wohnungen belegt',v(String(units),'/ '+n),pu+' % Auslastung · '+(n-units)+' komplett frei',el('div',{class:'meter'},el('i',{class:lv,style:'width:'+Math.min(100,pu)+'%'})));
+      const sub=c.querySelector('.sub');sub.replaceChildren(el('span',{class:lv,style:'font-weight:600',text:pu+' % Auslastung'}),document.createTextNode(' · '+(n-units)+' komplett frei'));return c})(),
     k('Noch nicht abgerechnet',v(eur(open)),openN?openN+' Buchung'+(openN>1?'en':'')+' mit offenen Nächten':'alles abgerechnet'),
     k('Umsatz '+new Date(toT(mFrom)).toLocaleDateString('de-DE',{month:'long',timeZone:'UTC'})+' (netto)',v(eur(rev.net+rev.est)),
       !rev.est&&!rev.net?'noch keine Buchungen':
@@ -614,6 +778,103 @@ function rowItem(b,right){
     el('div',{class:'main'},el('div',{class:'t',text:b.company||'Ohne Firma'}),el('div',{class:'s',text:unitName(b.unitId)+' · '+(b.persons||0)+' Pers.'})),
     el('div',{class:'r'},right));
 }
+/* ===== Statistik ===== */
+const posJson=p=>(p.positions||[]).map(x=>({d:(x.description||'').trim(),q:x.quantity,u:x.unitPrice,v:x.vatRate}));
+const MONTHS=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+function statWindow(){
+  const y=+TODAY.slice(0,4),m=+TODAY.slice(5,7);
+  const mStart=k=>{const t=new Date(Date.UTC(y,m-1-k,1));return t.toISOString().slice(0,10)};
+  if(statRange==='30d'){const from=addDays(TODAY,-29);return{from,to:addDays(TODAY,1),label:'Letzte 30 Tage',daily:true}}
+  if(statRange==='6m')return{from:mStart(5),to:addMonths(mStart(0),1),label:'Letzte 6 Monate'};
+  if(statRange==='ytd')return{from:y+'-01-01',to:addMonths(mStart(0),1),label:'Seit Jahresbeginn'};
+  if(statRange==='all'){const first=invoices.map(i=>i.invoice_date).filter(Boolean).sort()[0];
+    return{from:first?first.slice(0,7)+'-01':mStart(0),to:addMonths(mStart(0),1),label:'Gesamt'}}
+  return{from:mStart(11),to:addMonths(mStart(0),1),label:'Letzte 12 Monate'};
+}
+const invNet=i=>i.net!=null?+i.net:(i.total!=null&&i.vat!=null?+i.total-+i.vat:0);
+const niceMax=v=>{if(v<=0)return 1;const e=Math.pow(10,Math.floor(Math.log10(v)));const f=v/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e};
+const eurShort=v=>Math.abs(v)>=1000?(Math.round(v/100)/10).toLocaleString('de-DE')+' T€':Math.round(v).toLocaleString('de-DE')+' €';
+function showTip(e,html){const t=$('#chart-tip');t.replaceChildren(...html);t.hidden=false;
+  const r=(e.currentTarget||e.target).getBoundingClientRect();const w=t.offsetWidth,h=t.offsetHeight;
+  t.style.left=Math.max(8,Math.min(innerWidth-w-8,r.left+r.width/2-w/2))+'px';t.style.top=Math.max(8,r.top-h-8)+'px'}
+function hideTip(){$('#chart-tip').hidden=true}
+function renderStats(){
+  document.querySelectorAll('#st-range button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.r===statRange));
+  const w=statWindow();
+  const inv=activeInvoices().filter(i=>i.invoice_date&&inScope(i.unit_id)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
+  // Stornos ohne erfasstes Original zählen negativ mit
+  const loose=invoices.filter(i=>i.is_storno&&!invoices.some(o=>o.number===i.cancels)&&i.invoice_date&&inScope(i.unit_id)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
+  const all=[...inv,...loose];
+  const sum=all.reduce((t,i)=>t+invNet(i),0);
+  const mFrom=TODAY.slice(0,7)+'-01';
+  const month=activeInvoices().filter(i=>i.invoice_date&&inScope(i.unit_id)&&i.invoice_date>=mFrom&&i.invoice_date<=TODAY).reduce((t,i)=>t+invNet(i),0);
+  $('#st-range-lbl').textContent=w.label;$('#st-sum').textContent=eur(sum);$('#st-month').textContent=eur(month);$('#st-count').textContent=String(inv.length);
+  // Spalten
+  const buckets=[];
+  if(w.daily){for(let d=w.from;d<w.to;d=addDays(d,1))buckets.push({key:d,label:String(+d.slice(8)),long:fmt(d),v:0,n:0})}
+  else{for(let d=w.from;d<w.to;d=addMonths(d,1))buckets.push({key:d.slice(0,7),label:MONTHS[+d.slice(5,7)-1]+(buckets.length===0||d.slice(5,7)==='01'?' '+d.slice(2,4):''),long:MONTHS[+d.slice(5,7)-1]+' '+d.slice(0,4),v:0,n:0})}
+  const idx=Object.fromEntries(buckets.map((b,i)=>[b.key,i]));
+  all.forEach(i=>{const k=w.daily?i.invoice_date:i.invoice_date.slice(0,7);const b=buckets[idx[k]];if(b){b.v+=invNet(i);b.n+=i.is_storno?0:1}});
+  const top=Math.max(0,...buckets.map(b=>b.v));
+  const stepV=niceMax(Math.max(top,1)/4), max=Math.max(stepV,Math.ceil(top/stepV)*stepV);
+  const ticks=[];for(let t=0;t<=max+1e-6;t+=stepV)ticks.push(t);
+  const step=w.daily?5:buckets.length>36?6:buckets.length>18?3:buckets.length>8?2:1;
+  const chart=$('#st-chart');
+  chart.replaceChildren(
+    el('div',{class:'grid'},ticks.map(t=>el('div',{class:'gl'+(t===0?' zero':''),style:'bottom:'+(t/max*100)+'%'},el('span',{text:eurShort(t)})))),
+    el('div',{class:'cols'},buckets.map((b,i)=>{
+      const cur=w.daily?b.key===TODAY:b.key===TODAY.slice(0,7);
+      const col=el('div',{class:'col'+(cur?' cur':''),tabindex:'0','aria-label':b.long+': '+eur(b.v)},
+        el('div',{class:'plot'},el('div',{class:'bar2',style:'height:'+Math.max(0,b.v/max*100)+'%'})),
+        (i%step===0||i===buckets.length-1&&!w.daily)?el('div',{class:'xl',style:'left:'+((i+.5)/buckets.length*100)+'%',text:b.label}):null);
+      const tip=e=>showTip(e,[el('div',{text:b.long+(cur?' (laufend)':'')}),el('b',{text:eur2(b.v)}),el('div',{text:b.n+' Rechnung'+(b.n===1?'':'en')})]);
+      col.addEventListener('mouseenter',tip);col.addEventListener('focus',tip);col.addEventListener('mouseleave',hideTip);col.addEventListener('blur',hideTip);
+      return col;
+    })));
+  // x-Achsen-Beschriftungen liegen absolut im Diagramm
+  chart.querySelectorAll('.xl').forEach(x=>chart.append(x));
+  // Hauptkunden
+  const byCust={};all.forEach(i=>{const k=(i.customer||'Unbekannt').trim();byCust[k]=(byCust[k]||0)+invNet(i)});
+  hbars($('#st-cust'),Object.entries(byCust).sort((a,c)=>c[1]-a[1]).slice(0,5),'Noch keine Rechnungen in diesem Zeitraum.');
+  // Produkte aus Rechnungspositionen
+  const byProd={};let missing=0;
+  all.forEach(i=>{if(!Array.isArray(i.positions)||!i.positions.length){missing++;return}
+    i.positions.forEach(x=>{const k=prodGroup(x.d);const v=(x.q!=null&&x.u!=null)?x.q*x.u:0;byProd[k]=(byProd[k]||0)+v})});
+  hbars($('#st-prod'),Object.entries(byProd).sort((a,c)=>c[1]-a[1]).slice(0,5),posReady?'Noch keine Positionsdaten in diesem Zeitraum.':'Für Produkte fehlt noch ein Datenbank-Schritt (SQL 08).');
+  const note=$('#st-prod-note');note.replaceChildren();
+  if(posReady&&missing){note.append(el('span',{text:missing+' Rechnung'+(missing===1?'':'en')+' ohne Positionsdaten.'}));
+    if(canWrite)note.append(el('button',{class:'btn small',onclick:backfillPositions},'Aus gespeicherten PDFs nachladen'))}
+}
+// Positionen zusammenfassen: alle Übernachtungs- und alle Reinigungspositionen jeweils als eine Gruppe
+function prodGroup(d){const t=(d||'').trim();if(/übernacht|uebernacht/i.test(t))return'Übernachtungen';if(/reinig/i.test(t))return'Reinigungen';return t||'Ohne Bezeichnung'}
+function hbars(box,rows,empty){
+  if(!rows.length){box.replaceChildren(el('div',{class:'empty',style:'padding:0',text:empty}));return}
+  const max=Math.max(...rows.map(r=>r[1]),1);
+  box.replaceChildren(...rows.map(([n,v])=>{
+    const r=el('div',{class:'hbar',tabindex:'0'},el('span',{class:'nm',text:n,title:n}),el('span',{class:'tr'},el('i',{style:'width:'+Math.max(0,v/max*100)+'%'})),el('span',{class:'vv',text:eurShort(v)}));
+    const tip=e=>showTip(e,[el('div',{text:n}),el('b',{text:eur2(v)})]);
+    r.addEventListener('mouseenter',tip);r.addEventListener('focus',tip);r.addEventListener('mouseleave',hideTip);r.addEventListener('blur',hideTip);
+    return r}));
+}
+async function backfillPositions(){
+  const todo=invoices.filter(i=>(!Array.isArray(i.positions)||!i.positions.length)&&i.file_path);
+  if(!todo.length){toast('Keine gespeicherten PDFs ohne Positionen gefunden.');return}
+  let ok=0,fail=0;
+  for(const [n,i] of todo.entries()){
+    toast('Lese Rechnung '+(n+1)+' von '+todo.length+' …');
+    try{
+      const {data:blob,error}=await sb.storage.from('rechnungen').download(i.file_path);
+      if(error||!blob)throw 0;
+      const p=await readInvoicePdf(blob);
+      if(!p||!(p.positions||[]).length)throw 0;
+      const {error:e2}=await sb.from('invoices').update({positions:posJson(p)}).eq('id',i.id);
+      if(e2)throw 0;ok++;
+    }catch(e){fail++}
+  }
+  toast(ok+' Rechnung'+(ok===1?'':'en')+' ergänzt'+(fail?', '+fail+' nicht lesbar':''));
+  await loadBookings();
+}
+
 function renderOverview(){
   const scopeBeds=SU().reduce((s,u)=>s+u.cap,0);
   const due=SB().map(b=>({b,bl:billing(b)})).filter(x=>x.bl.days>0).sort((a,c)=>c.bl.days-a.bl.days);
@@ -654,6 +915,7 @@ function renderOverview(){
       el('div',{class:'main'},el('div',{class:'t',text:unitName(c.unitId)}),el('div',{class:'s',text:'Abreise: '+nm(c.leave)+' · Anreise: '+nm(c.arrive)})),
       el('span',{class:'pill warn',text:fmt(c.day)+(c.day===TODAY?' · heute':' · in '+diff(TODAY,c.day)+' T.')}));
   }));
+  renderStats();
   const ob=overbooked(SB());
   const curOver=Object.entries(ob).flatMap(([id,o])=>(o.ranges||[]).filter(r=>r.to>TODAY).map(r=>({id,...r}))).sort((a,c)=>a.from<c.from?-1:1);
   $('#ov-over-panel').hidden=!curOver.length;
@@ -924,12 +1186,17 @@ function exportCsv(){
 function syncHead(){
   const sc=$('#tl-scroll'),hw=$('#tl-headwrap');if(!sc||!hw)return;
   hw.scrollLeft=sc.scrollLeft;
-  const bar=document.querySelector('.tl-bar');if(bar)document.documentElement.style.setProperty('--barh',bar.offsetHeight+'px');
+  const bar=document.querySelector('.tl-bar'),mt=document.querySelector('.mtop');
+  const mh=mt&&getComputedStyle(mt).display!=='none'?mt.offsetHeight:0;
+  document.documentElement.style.setProperty('--mtop',mh+'px');
+  if(bar)document.documentElement.style.setProperty('--barh',bar.offsetHeight+'px');
 }
 $('#tl-scroll').addEventListener('scroll',()=>{$('#tl-headwrap').scrollLeft=$('#tl-scroll').scrollLeft},{passive:true});
 window.addEventListener('resize',syncHead);
 
 /* ===== Events ===== */
+document.querySelectorAll('#st-range button').forEach(b=>b.addEventListener('click',()=>{statRange=b.dataset.r;try{localStorage.setItem('mafl-stat',statRange)}catch(e){}renderStats()}));
+addEventListener('scroll',hideTip,{passive:true});
 function applyOwnerSelect(){
   const sel=$('#owner-sel');
   if(ownerSel!=='all'&&!allowedOwner(ownerSel))ownerSel='all';
@@ -939,7 +1206,12 @@ function applyOwnerSelect(){
 applyOwnerSelect();
 $('#owner-sel').addEventListener('change',e=>{ownerSel=e.target.value;try{localStorage.setItem('mafl-owner',ownerSel)}catch(_){}render()});
 function save(){try{localStorage.setItem('mafl-view',view)}catch(e){}}
-document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;save();render()}));
+document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;save();setNav(false);render();scrollTo(0,0)}));
+function setNav(open){document.body.classList.toggle('nav-open',open);$('#btn-menu').setAttribute('aria-expanded',open)}
+$('#btn-menu').addEventListener('click',()=>setNav(!document.body.classList.contains('nav-open')));
+$('#side-scrim').addEventListener('click',()=>setNav(false));
+['#btn-dep','#btn-inv','#btn-new'].forEach(id=>$(id).addEventListener('click',()=>setNav(false)));
+$('#btn-new-m').addEventListener('click',()=>$('#btn-new').click());
 $('#btn-new').addEventListener('click',()=>openDrawer(null,view==='tl'?{start:tlMonth===TODAY.slice(0,7)?TODAY:tlMonth+'-01'}:null));
 $('#tl-prev').addEventListener('click',()=>{tlMonth=addMonths(tlMonth+'-01',-1).slice(0,7);renderTimeline()});
 $('#tl-next').addEventListener('click',()=>{tlMonth=addMonths(tlMonth+'-01',1).slice(0,7);renderTimeline()});
@@ -1052,7 +1324,8 @@ function parseInvoice(items,width){
 }
 
 /* ===== Rechnungen: PDF lesen ===== */
-let invoices=[], invoicesReady=false, stornoReady=false, depReady=false;
+let invoices=[], invoicesReady=false, stornoReady=false, depReady=false, posReady=false;
+let statRange='12m';try{const r=localStorage.getItem('mafl-stat');if(['12m','6m','30d','ytd','all'].includes(r))statRange=r}catch(e){}
 const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 let pdfjsReady=null;
 function loadPdfJs(){
@@ -1450,7 +1723,7 @@ async function saveStorno(file,p,st){
   if(up.error){const alt=filePath.replace('.pdf','-'+Date.now()+'.pdf');const up2=await sb.storage.from('rechnungen').upload(alt,file,{contentType:'application/pdf'});filePath=up2.error?null:alt}
   const {error}=await sb.from('invoices').insert({number:p.number,invoice_date:p.date||null,customer:p.customer,unit_id:st.unitId,location_text:p.location,
     period_start:p.periodStart,period_end:p.periodEnd,quantity:p.quantity,unit_price:p.unitPrice,vat_rate:p.vatRate,net:p.net,vat:p.vat,total:p.total,
-    booking_id:bookingId,file_path:filePath,is_storno:true,cancels:p.cancels||null});
+    booking_id:bookingId,file_path:filePath,is_storno:true,cancels:p.cancels||null,...(posReady?{positions:posJson(p)}:{})});
   if(error)throw new Error(error.code==='23505'?'Stornorechnung '+p.number+' ist schon erfasst.':'Storno konnte nicht gespeichert werden: '+error.message);
   await loadBookings();
 }
@@ -1474,7 +1747,8 @@ async function saveInvoice(file,p,st){
     if(error)throw new Error('Buchung konnte nicht aktualisiert werden: '+error.message);
   }
   const invRow={number:p.number,invoice_date:p.date||null,due_date:p.due||null,customer:p.customer,unit_id:st.unitId,location_text:p.location,
-    period_start:p.periodStart,period_end:p.periodEnd,quantity:p.quantity,unit_price:p.unitPrice,vat_rate:p.vatRate,net:p.net,vat:p.vat,total:p.total,booking_id:bookingId};
+    period_start:p.periodStart,period_end:p.periodEnd,quantity:p.quantity,unit_price:p.unitPrice,vat_rate:p.vatRate,net:p.net,vat:p.vat,total:p.total,booking_id:bookingId,
+    ...(posReady?{positions:posJson(p)}:{})};
   if(st.reassign){
     const {error}=await sb.from('invoices').update(invRow).eq('id',st.reassign);
     if(error)throw new Error('Rechnung konnte nicht neu zugeordnet werden: '+error.message);
@@ -1629,7 +1903,7 @@ function renderBilling(){
   const note=$('#rg-note');note.replaceChildren();
   const head=$('#rg-head'),body=$('#rg-body');
   if(!billingReady){
-    note.append(el('div',{class:'notice',style:'margin-bottom:12px'},el('b',{text:'Rechnungsstellung ist noch nicht eingerichtet. '}),'Bitte einmal „supabase/08_rechnungsstellung.sql“ im Supabase SQL Editor ausführen.'));
+    note.append(el('div',{class:'notice',style:'margin-bottom:12px'},el('b',{text:'Rechnungsstellung ist noch nicht eingerichtet. '}),'Bitte einmal „supabase/09_rechnungsstellung.sql“ im Supabase SQL Editor ausführen.'));
     head.replaceChildren();body.replaceChildren();return;
   }
   const q=rgQuery.trim().toLowerCase();
@@ -1855,7 +2129,7 @@ function customerSnapshot(c){return c?{id:c.id,customer_no:c.customer_no,kind:c.
 /* --- Rechnung schreiben --- */
 let invDraft=null;
 function openInvoiceDrawer(preset){
-  if(!billingReady){toast('Bitte zuerst SQL 08 in Supabase ausführen.');return}
+  if(!billingReady){toast('Bitte zuerst SQL 09 (Rechnungsstellung) in Supabase ausführen.');return}
   if(!canWrite){toast('Nur mit Bearbeitungsrechten möglich.');return}
   const b=preset.bookingId?bookings.find(x=>x.id===preset.bookingId):null;
   let from='',to='';
@@ -2039,7 +2313,8 @@ async function storeInvoicePdf(row){
     const path=row.invoice_date.slice(0,4)+'/'+(row.issuer==='Torben Schmidt'?'TS_':'PSA_')+String(row.number).replace(/[^A-Za-z0-9._-]/g,'_')+'.pdf';
     const up=await sb.storage.from('rechnungen').upload(path,new Blob([bytes],{type:'application/pdf'}),{contentType:'application/pdf',upsert:false});
     if(up.error)throw up.error;
-    const {error}=await sb.from('invoices').update({file_path:path}).eq('id',row.id);
+    const pos=(row.lines||[]).map(l=>({d:l.text||'',q:+l.qty,u:+l.price,v:+l.vat}));
+    const {error}=await sb.from('invoices').update({file_path:path,...(posReady?{positions:pos}:{})}).eq('id',row.id);
     if(error)throw error;
     return true;
   }catch(e){console.error(e);return false}
@@ -2274,7 +2549,7 @@ function showAuth(mode){
   $('#app').hidden=true;$('#auth').hidden=false;
   const setpw=authMode==='setpw', forgot=authMode==='forgot';
   $('#auth-title').textContent=setpw?'Passwort festlegen':forgot?'Passwort zurücksetzen':'Belegungsplan';
-  $('#auth-sub').textContent=setpw?'Wähle ein Passwort mit mindestens 8 Zeichen.':forgot?'Wir schicken dir einen Link per E-Mail.':'Monteur Apartments Flensburg · bitte anmelden';
+  $('#auth-sub').textContent=setpw?'Wähle ein Passwort mit mindestens 8 Zeichen.':forgot?'Wir schicken dir einen Link per E-Mail.':'Monteur Apartments Flensburg · Verwaltung';
   $('#auth-email-f').hidden=setpw;
   $('#auth-pw-f').hidden=forgot;
   $('#auth-pw').autocomplete=setpw?'new-password':'current-password';
@@ -2313,6 +2588,8 @@ async function loadBookings(){
   if(inv.error){inv=await sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path').order('invoice_date',{ascending:false});stornoReady=false}else stornoReady=true;
   invoices=inv.error?[]:inv.data;invoicesReady=!inv.error;
   if(!depReady){const t=await sb.from('bookings').select('departure_confirmed').limit(1);depReady=!t.error}
+  {const pr=await sb.from('invoices').select('id,positions');posReady=!pr.error;
+   if(!pr.error){const m=Object.fromEntries(pr.data.map(r=>[r.id,r.positions]));invoices.forEach(i=>i.positions=m[i.id]||null)}}
   bookings=data.map(fromRow);
   await loadBilling();
   loaded=true;render();
@@ -2332,6 +2609,7 @@ async function startApp(session){
   myOwners=Array.isArray(me?.owners)?OWNERS.filter(o=>me.owners.includes(o)):OWNERS.slice();
   applyOwnerSelect();
   $('#user-name').textContent=me?.name||session.user.email;
+  $('#user-ini').textContent=((me?.name||session.user.email||'?').trim()[0]||'?').toUpperCase();
   render();
   await loadBookings();
   if(channel)sb.removeChannel(channel);
