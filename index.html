@@ -335,6 +335,7 @@ td .s{font-size:12px;color:var(--muted)}
         <button data-r="6m" aria-pressed="false">6 Monate</button>
         <button data-r="30d" aria-pressed="false">30 Tage</button>
         <button data-r="ytd" aria-pressed="false">Seit Jahresbeginn</button>
+        <button data-r="all" aria-pressed="false">All Time</button>
       </div>
     </div>
     <div class="stats-grid">
@@ -620,6 +621,8 @@ function statWindow(){
   if(statRange==='30d'){const from=addDays(TODAY,-29);return{from,to:addDays(TODAY,1),label:'Letzte 30 Tage',daily:true}}
   if(statRange==='6m')return{from:mStart(5),to:addMonths(mStart(0),1),label:'Letzte 6 Monate'};
   if(statRange==='ytd')return{from:y+'-01-01',to:addMonths(mStart(0),1),label:'Seit Jahresbeginn'};
+  if(statRange==='all'){const first=invoices.map(i=>i.invoice_date).filter(Boolean).sort()[0];
+    return{from:first?first.slice(0,7)+'-01':mStart(0),to:addMonths(mStart(0),1),label:'Gesamt'}}
   return{from:mStart(11),to:addMonths(mStart(0),1),label:'Letzte 12 Monate'};
 }
 const invNet=i=>i.net!=null?+i.net:(i.total!=null&&i.vat!=null?+i.total-+i.vat:0);
@@ -649,7 +652,7 @@ function renderStats(){
   const top=Math.max(0,...buckets.map(b=>b.v));
   const stepV=niceMax(Math.max(top,1)/4), max=Math.max(stepV,Math.ceil(top/stepV)*stepV);
   const ticks=[];for(let t=0;t<=max+1e-6;t+=stepV)ticks.push(t);
-  const step=w.daily?5:buckets.length>8?2:1;
+  const step=w.daily?5:buckets.length>36?6:buckets.length>18?3:buckets.length>8?2:1;
   const chart=$('#st-chart');
   chart.replaceChildren(
     el('div',{class:'grid'},ticks.map(t=>el('div',{class:'gl'+(t===0?' zero':''),style:'bottom:'+(t/max*100)+'%'},el('span',{text:eurShort(t)})))),
@@ -1143,7 +1146,7 @@ function parseInvoice(items,width){
 
 /* ===== Rechnungen: PDF lesen ===== */
 let invoices=[], invoicesReady=false, stornoReady=false, depReady=false, posReady=false;
-let statRange='12m';try{const r=localStorage.getItem('mafl-stat');if(['12m','6m','30d','ytd'].includes(r))statRange=r}catch(e){}
+let statRange='12m';try{const r=localStorage.getItem('mafl-stat');if(['12m','6m','30d','ytd','all'].includes(r))statRange=r}catch(e){}
 const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 let pdfjsReady=null;
 function loadPdfJs(){
