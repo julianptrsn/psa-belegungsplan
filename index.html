@@ -295,8 +295,8 @@ a.btn{text-decoration:none;color:inherit}
       <button role="tab" id="tab-rg" data-view="rg" aria-selected="false">Rechnungen</button>
     </div>
     <button class="btn" id="btn-dep" hidden title="Bestätigte Abreise für eine Buchung eintragen">Abreise</button>
-    <button class="btn" id="btn-inv" hidden title="Eine oder mehrere Rechnungen als PDF hochladen">Rechnung hochladen</button>
-    <input type="file" id="inv-file" accept="application/pdf,.pdf" multiple hidden>
+    <button class="btn" id="btn-inv" hidden title="Rechnungen als PDF oder Zervant-ZIP hochladen">Rechnung hochladen</button>
+    <input type="file" id="inv-file" accept="application/pdf,.pdf,application/zip,.zip" multiple hidden>
     <button class="btn primary" id="btn-new" hidden>+ Buchung</button>
     <div class="userbox"><span id="user-name"></span><button class="btn small" id="btn-logout">Abmelden</button></div>
   </div>
@@ -371,6 +371,8 @@ a.btn{text-decoration:none;color:inherit}
       <input class="search" id="rg-q" type="search" placeholder="Kunde, Nummer oder Wohnung">
       <span class="grow"></span>
       <button class="btn small" id="btn-bset" hidden>Einstellungen</button>
+      <button class="btn small" id="btn-cusimp" hidden>Kunden aus Zervant</button>
+      <input type="file" id="cusimp-file" accept=".csv,text/csv" hidden>
       <button class="btn small" id="btn-cus" hidden>+ Kunde</button>
       <button class="btn small primary" id="btn-rnew" hidden>+ Rechnung</button>
     </div>
@@ -1126,10 +1128,94 @@ function priceFromInvoice(p,unitId){
 /* ===== Rechnungen: Upload-Warteschlange & Prüfansicht ===== */
 let invQueue=[],invPos=0;
 async function startInvoiceImport(files){
-  files=[...files].filter(f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name));
-  if(!files.length){toast('Bitte PDF-Dateien wählen.');return}
+  files=[...files];
+  const isZip=f=>/zip/i.test(f.type)||/\.zip$/i.test(f.name), isPdf=f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name);
+  let pdfs=files.filter(isPdf);
+  const zips=files.filter(isZip);
   if(!invoicesReady){toast('Rechnungsablage ist noch nicht eingerichtet (SQL fehlt).');return}
-  invQueue=files;invPos=0;nextInvoice();
+  if(zips.length){
+    $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer'},el('div',{class:'body'},el('p',{class:'ro-note',text:'Entpacke '+zips.map(z=>z.name).join(', ')+' …'}))));
+    try{
+      const JSZip=await loadJsZip();
+      for(const z of zips){const zip=await JSZip.loadAsync(z);
+        for(const e of Object.values(zip.files)){if(e.dir||!/\.pdf$/i.test(e.name)||/(^|\/)(__MACOSX|\.)/.test(e.name))continue;
+          pdfs.push(new File([await e.async('blob')],e.name.split('/').pop(),{type:'application/pdf'}))}}
+    }catch(e){closeDrawer();toast('ZIP-Datei konnte nicht gelesen werden.');return}
+  }
+  if(!pdfs.length){closeDrawer();toast('Keine PDF-Rechnungen gefunden.');return}
+  if(pdfs.length===1){invQueue=pdfs;invPos=0;nextInvoice();return}
+  await bulkInvoiceImport(pdfs);
+}
+let jsZipReady=null;
+function loadJsZip(){
+  if(window.JSZip)return Promise.resolve(window.JSZip);
+  if(jsZipReady)return jsZipReady;
+  jsZipReady=new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload=()=>res(window.JSZip);s.onerror=()=>{jsZipReady=null;rej(new Error('ZIP-Baustein konnte nicht geladen werden'))};document.head.append(s)});
+  return jsZipReady;
+}
+// Absender einer gelesenen Rechnung: aus der Wohnung, sonst aus dem Rechnungskopf
+const parsedOwner=(p,unitId)=>unitId?UNIT[unitId].owner:(p&&p.issuer?(sameOwner(p.issuer,'Torben Schmidt')?'Torben Schmidt':'PSA Immobilien'):'');
+const findDup=(p,unitId)=>{const o=parsedOwner(p,unitId);return invoices.find(i=>i.number===p.number&&(!o||invOwner(i)===o))||null};
+// Entscheidet, ob eine Rechnung ohne Rückfrage übernommen werden kann.
+function autoPlan(p){
+  if(!(p&&p.number&&p.periodStart&&p.periodEnd&&p.periodEnd>=p.periodStart))return{action:'fail',reason:'nicht lesbar'};
+  const mu=matchUnit(p.location), unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
+  if(findDup(p,unitId))return{action:'skip',reason:'schon erfasst'};
+  if(p.isStorno)return{action:'review',reason:'Stornorechnung'};
+  if(!unitId)return{action:'review',reason:'Wohnung „'+(p.location||'?')+'“ nicht erkannt'};
+  if(p.issuer&&!sameOwner(p.issuer,UNIT[unitId].owner))return{action:'review',reason:'Absender passt nicht zur Wohnung'};
+  if(p.fixes&&p.fixes.length)return{action:'review',reason:'Datum auf der Rechnung fehlerhaft'};
+  const pr=priceFromInvoice(p,unitId);
+  const st={unitId,company:p.customer||'',target:'',persons:pr.persons??'',price:pr.price??'',priceModel:pr.priceModel||'unit_night',extend:true,start:p.periodStart};
+  if(!st.company.trim())return{action:'review',reason:'Firma fehlt'};
+  const cands=bookingCandidates(unitId,st.company,p.periodStart,p.periodEnd);
+  const top=cands[0];
+  if(top&&top.score>=4&&!(cands[1]&&cands[1].score===top.score)){st.target=top.b.id;return{action:'auto',st,unitId}}
+  if(top&&top.score>=2)return{action:'review',reason:'Buchung nicht eindeutig'};
+  if(+st.persons>0){st.target='new';return{action:'auto',st,unitId,isNew:true}}
+  return{action:'review',reason:'keine Buchung, Personenzahl unbekannt'};
+}
+async function bulkInvoiceImport(files){
+  editing={id:null,invoice:true};
+  const status=el('p',{class:'ro-note'}),bar=el('div',{class:'meter'},el('i',{style:'width:0%'}));
+  let stop=false;
+  $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer',role:'dialog','aria-modal':'true'},
+    el('header',{},el('h2',{text:'Rechnungen importieren'})),el('div',{class:'body'},status,bar),
+    el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn',onclick:()=>{stop=true}},'Abbrechen'))));
+  const prog=(t,i,n)=>{status.textContent=t;bar.firstChild.style.width=Math.round(i/n*100)+'%'};
+  const items=[];
+  for(let i=0;i<files.length&&!stop;i++){prog('Lese '+(i+1)+' von '+files.length+' …',i,files.length);
+    let p=null;try{p=await readInvoicePdf(files[i])}catch(e){}
+    items.push({file:files[i],p})}
+  items.sort((a,c)=>((a.p&&a.p.periodStart)||'9')<((c.p&&c.p.periodStart)||'9')?-1:1);
+  const res={auto:[],created:[],skip:[],review:[],fail:[]};
+  for(let i=0;i<items.length;i++){
+    const {file,p}=items[i];
+    if(stop){res.review.push({file,p,reason:'abgebrochen'});continue}
+    prog('Übernehme '+(i+1)+' von '+items.length+' …',i,items.length);
+    const plan=autoPlan(p);
+    if(plan.action==='auto'){
+      try{await saveInvoice(file,p,plan.st);(plan.isNew?res.created:res.auto).push({file,p,unitId:plan.unitId})}
+      catch(e){res.review.push({file,p,reason:e.message||'Speichern fehlgeschlagen'})}
+    }else res[plan.action].push({file,p,reason:plan.reason});
+  }
+  await loadBookings();
+  const row=(x,extra)=>el('span',{class:'row'},el('span',{text:(x.p&&x.p.number?x.p.number+' · ':'')+((x.p&&x.p.customer)||x.file.name)+(x.unitId?' · '+unitName(x.unitId):'')}),el('b',{text:extra||(x.p&&x.p.total!=null?eur2(x.p.total):'')}));
+  const block=(title,list,extra)=>list.length?el('details',{open:list===res.review||list===res.fail},el('summary',{style:'cursor:pointer;font-weight:600;padding:4px 0',text:title+' ('+list.length+')'}),el('div',{class:'invlist',style:'margin-top:6px'},list.map(x=>row(x,extra&&extra(x))))):null;
+  const reviewBtn=res.review.length?el('button',{class:'btn primary',onclick:()=>{invQueue=res.review.map(x=>x.file);invPos=0;nextInvoice()}},res.review.length+' jetzt prüfen'):null;
+  $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer wide',role:'dialog','aria-modal':'true'},
+    el('header',{},el('h2',{text:'Import abgeschlossen'}),el('button',{class:'btn small',onclick:closeDrawer,'aria-label':'Schließen'},'✕')),
+    el('div',{class:'body'},
+      el('div',{class:'sumbox'},
+        el('div',{},el('span',{text:'Übernommen und Buchung zugeordnet'}),el('b',{text:String(res.auto.length)})),
+        el('div',{},el('span',{text:'Übernommen, Buchung neu angelegt'}),el('b',{text:String(res.created.length)})),
+        el('div',{},el('span',{text:'Schon im Tool – übersprungen'}),el('b',{text:String(res.skip.length)})),
+        el('div',{class:'tot'},el('span',{text:'Bitte selbst prüfen'}),el('b',{text:String(res.review.length)})),
+        res.fail.length?el('div',{},el('span',{text:'Nicht lesbar (kein Text im PDF)'}),el('b',{text:String(res.fail.length)})):null),
+      block('Bitte prüfen',res.review,x=>x.reason),block('Nicht lesbar',res.fail,()=>'—'),
+      block('Neu angelegte Buchungen',res.created),block('Zugeordnet',res.auto),block('Übersprungen',res.skip,()=>'schon erfasst')),
+    el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Schließen'),reviewBtn)));
 }
 async function nextInvoice(){
   if(invPos>=invQueue.length){closeDrawer();invQueue=[];return}
@@ -1147,7 +1233,7 @@ function drawInvoiceReview(file,p){
   const unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
   const pr=ok?priceFromInvoice(p,unitId):{};
   const st={unitId:unitId||'',company:ok?p.customer:'',target:'',persons:pr.persons??'',price:pr.price??'',priceModel:pr.priceModel||'unit_night',extend:true,start:ok?p.periodStart:''};
-  const dup=ok?invoices.find(i=>i.number===p.number):null;
+  const dup=ok?findDup(p,unitId):null;
   const f=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
   const next=()=>{invPos++;nextInvoice()};
 
@@ -1479,7 +1565,7 @@ function openDepartureDrawer(preId){
 $('#inv-file').addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';if(fs.length)startInvoiceImport(fs)});
 let dragDepth=0,dz=null;
 const hasFiles=e=>[...(e.dataTransfer?.types||[])].includes('Files');
-document.addEventListener('dragenter',e=>{if(!canWrite||!hasFiles(e))return;e.preventDefault();dragDepth++;if(!dz){dz=el('div',{class:'dropzone'},el('div',{text:'Rechnungen hier ablegen'}));document.body.append(dz)}});
+document.addEventListener('dragenter',e=>{if(!canWrite||!hasFiles(e))return;e.preventDefault();dragDepth++;if(!dz){dz=el('div',{class:'dropzone'},el('div',{text:'Rechnungen (PDF oder ZIP) hier ablegen'}));document.body.append(dz)}});
 document.addEventListener('dragover',e=>{if(canWrite&&hasFiles(e))e.preventDefault()});
 document.addEventListener('dragleave',()=>{if(--dragDepth<=0&&dz){dz.remove();dz=null;dragDepth=0}});
 document.addEventListener('drop',e=>{if(!hasFiles(e))return;e.preventDefault();dragDepth=0;if(dz){dz.remove();dz=null}if(canWrite&&e.dataTransfer.files.length)startInvoiceImport(e.dataTransfer.files)});
@@ -1538,7 +1624,7 @@ function renderBilling(){
   document.querySelectorAll('#rg-mode button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===rgMode));
   document.querySelectorAll('#rg-seg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.f===rgFilter));
   $('#rg-seg').hidden=rgMode!=='inv';
-  $('#btn-rnew').hidden=!canWrite||!billingReady;$('#btn-cus').hidden=!canWrite||!billingReady;$('#btn-bset').hidden=!canWrite||!billingReady;
+  $('#btn-rnew').hidden=!canWrite||!billingReady;$('#btn-cus').hidden=!canWrite||!billingReady;$('#btn-bset').hidden=!canWrite||!billingReady;$('#btn-cusimp').hidden=!canWrite||!billingReady||rgMode!=='cus';
   $('#rg-q').placeholder=rgMode==='inv'?'Kunde, Nummer oder Wohnung':'Firma, Name, E-Mail oder Ort';
   const note=$('#rg-note');note.replaceChildren();
   const head=$('#rg-head'),body=$('#rg-body');
@@ -1591,6 +1677,8 @@ document.querySelectorAll('#rg-seg button').forEach(b=>b.addEventListener('click
 $('#rg-q').addEventListener('input',e=>{rgQuery=e.target.value;renderBilling()});
 $('#btn-rnew').addEventListener('click',()=>openInvoiceDrawer({}));
 $('#btn-cus').addEventListener('click',()=>openCustomerDrawer(null));
+$('#btn-cusimp').addEventListener('click',()=>$('#cusimp-file').click());
+$('#cusimp-file').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)importCustomersCsv(f)});
 $('#btn-bset').addEventListener('click',()=>openBillingSettings());
 
 /* --- Gemeinsame Drawer-Bausteine --- */
@@ -1674,6 +1762,63 @@ function openCustomerDrawer(id,preset,onSaved){
   if(!ro&&!id)setTimeout(()=>$('#c-company')?.focus(),50);
 }
 
+/* --- Kunden-Import aus Zervant (CSV „Daten als CSV-Datei herunterladen“) --- */
+function parseCsv(text){
+  text=text.replace(/^﻿/,'');
+  const sep=(text.split('\n')[0].match(/;/g)||[]).length>(text.split('\n')[0].match(/,/g)||[]).length?';':',';
+  const rows=[];let row=[],cur='',q=false;
+  for(let i=0;i<text.length;i++){const ch=text[i];
+    if(q){if(ch==='"'){if(text[i+1]==='"'){cur+='"';i++}else q=false}else cur+=ch}
+    else if(ch==='"')q=true;else if(ch===sep){row.push(cur);cur=''}
+    else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&text[i+1]==='\n')i++;row.push(cur);cur='';if(row.some(v=>v.trim()))rows.push(row);row=[]}
+    else cur+=ch}
+  row.push(cur);if(row.some(v=>v.trim()))rows.push(row);
+  return rows;
+}
+function zervantCustomers(text){
+  const rows=parseCsv(text);if(rows.length<2)return[];
+  const h=rows[0].map(x=>x.trim().toLowerCase());
+  const col=(r,...names)=>{for(const n of names){const ix=h.indexOf(n.toLowerCase());if(ix>=0&&r[ix]!=null)return r[ix].trim()}return''};
+  const landIx=h.indexOf('land');
+  return rows.slice(1).map(r=>{
+    const tail=landIx>=0?r.slice(landIx+1).map(x=>x.trim()):[];
+    const lang=tail.find(v=>/^(deutsch|englisch|english|german)$/i.test(v))||col(r,'Rechnungssprache');
+    const pay=(tail.find(v=>/^\d+\s*Tage?$/i.test(v))||col(r,'Zahlungsbedingungen')).match(/\d+/);
+    const strip=s=>s.replace(/^(Herr|Frau)\s+/i,'').trim();
+    const first=strip(col(r,'Vorname')),last=col(r,'Nachname'),company=col(r,'Firmenname');
+    const vat=col(r,'USt-IdNr.','USt-IdNr').replace(/\s/g,'').toUpperCase();
+    const no=col(r,'Nummer','Kundennummer');
+    const mail=col(r,'E-Mail').replace(/\s/g,'');
+    const country=(col(r,'Land')||'DE').toUpperCase().slice(0,2);
+    const isPrivate=!!first&&!!last&&normCo(company)===normCo(first+' '+last);
+    return{kind:isPrivate?'private':'company',customer_no:no&&no!=='0'?no:null,company_name:company||[first,last].filter(Boolean).join(' '),
+      tax_number:col(r,'Steuernummer'),vat_id:vat,first_name:first,last_name:last,phone:col(r,'Telefon')||col(r,'Handy'),
+      emails:/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)?[mail]:[],street:col(r,'Adresse 1'),street2:col(r,'Adresse 2'),zip:col(r,'PLZ'),city:col(r,'Ort'),
+      country:/^[A-Z]{2}$/.test(country)?country:'DE',language:/engl/i.test(lang)?'en':'de',payment_days:pay?Math.min(120,+pay[0]):(bset?.default_payment_days??3),
+      leitweg_id:'',lodging_exempt:false,lodging_exempt_note:'',notes:'Aus Zervant importiert'};
+  }).filter(c=>c.company_name);
+}
+const sameCustomer=(a,b)=>sameCo(custName(a),custName(b))&&(a.zip||'').replace(/\s/g,'')===(b.zip||'').replace(/\s/g,'');
+async function importCustomersCsv(file){
+  let list;try{list=zervantCustomers(await file.text())}catch(e){list=[]}
+  if(!list.length){toast('In der Datei wurden keine Kunden gefunden.');return}
+  const fresh=[],known=[];
+  list.forEach(c=>{if(customers.some(x=>sameCustomer(x,c))||fresh.some(x=>sameCustomer(x,c)))known.push(c);else fresh.push(c)});
+  const usedNo=new Set(customers.map(c=>c.customer_no).filter(Boolean));
+  fresh.forEach(c=>{if(c.customer_no&&usedNo.has(c.customer_no))c.customer_no=null;else if(c.customer_no)usedNo.add(c.customer_no)});
+  editing={id:null,customerImport:true};
+  const row=c=>el('span',{class:'row'},el('span',{text:custName(c)+(c.city?' · '+[c.zip,c.city].filter(Boolean).join(' '):'')}),el('b',{text:c.payment_days+' T.'}));
+  const btn=el('button',{class:'btn primary'},fresh.length+' Kunden importieren');btn.disabled=!fresh.length;
+  btn.addEventListener('click',async()=>{btn.disabled=true;
+    let {data,error}=await sb.from('customers').insert(fresh).select();
+    if(error){data=[];for(const c of fresh){const r=await sb.from('customers').insert({...c,customer_no:null}).select();if(r.data)data.push(...r.data)}}
+    toast((data||[]).length+' Kunden importiert');closeDrawer();await loadBookings();rgMode='cus';render()});
+  showDrawer('Kunden aus Zervant',el('div',{class:'body'},
+    el('div',{class:'hint',text:list.length+' Kunden in der Datei. Adressen, Steuernummern, E-Mail und Zahlungsziel werden übernommen; die Angaben lassen sich danach im Kundenstamm bearbeiten.'}),
+    fresh.length?el('details',{open:true},el('summary',{style:'cursor:pointer;font-weight:600',text:'Neu ('+fresh.length+')'}),el('div',{class:'invlist',style:'margin-top:6px'},fresh.map(row))):null,
+    known.length?el('details',{},el('summary',{style:'cursor:pointer;font-weight:600',text:'Schon vorhanden – wird übersprungen ('+known.length+')'}),el('div',{class:'invlist',style:'margin-top:6px'},known.map(row))):null),
+    el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Abbrechen'),btn),true);
+}
 /* --- Rechnung: Berechnung --- */
 function lodgingApplies(periodEnd){return !!bset&&!!periodEnd&&periodEnd>=bset.lodging_tax_since}
 function calcInvoice(lines,o){
