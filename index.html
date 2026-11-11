@@ -1397,15 +1397,24 @@ function matchUnit(location){
 const normLoc=s=>String(s||'').toLowerCase().replace(/ß/g,'ss').replace(/[^a-z0-9äöü]/g,'');
 // Zuerst: dieselbe Objektangabe beim selben Kunden. Sonst: dieselbe Objektangabe, wenn sie bisher immer derselben Wohnung zugeordnet wurde
 // (z. B. „Harrisleer Straße“ ohne Hausnummer kann je nach Kunde 88 oder 90 sein).
-function learnedUnit(location,customer){
+function learnedUnit(location,customer,after){
   const k=normLoc(location);if(!k)return null;
-  const same=invoices.filter(i=>i.unit_id&&UNIT[i.unit_id]&&normLoc(i.location_text)===k);
+  const same=invoices.filter(i=>i.unit_id&&UNIT[i.unit_id]&&normLoc(i.location_text)===k&&(!after||(i.period_start||'')>after));
   const top=list=>{const cnt={};list.forEach(i=>cnt[i.unit_id]=(cnt[i.unit_id]||0)+1);const e=Object.entries(cnt).sort((a,c)=>c[1]-a[1]);return e.length?e:null};
   const byCust=customer?top(same.filter(i=>sameCo(i.customer,customer))):null;
   if(byCust)return byCust[0][0];
   const all=top(same);return all&&all.length===1?all[0][0]:null;
 }
-const unitFromLocation=(loc,cust)=>learnedUnit(loc,cust)||matchUnit(loc);
+// Feste Regeln für ungenaue Objektangaben in alten Zervant-Rechnungen
+const LOCATION_RULES=[
+  // „Harrisleer Straße“ ohne Hausnummer war bis Juni 2026 immer Nr. 88, 1. OG, mit 6 Personen
+  {re:/^harrisleer\s*stra(ss|ß)e\.?$/i,until:'2026-06-30',unit:'h88-1',persons:6},
+];
+const locationRule=(loc,periodEnd)=>LOCATION_RULES.find(r=>r.re.test(String(loc||'').trim())&&(!r.until||!periodEnd||periodEnd<=r.until))||null;
+// Nach Ablauf einer Regel wird nur aus späteren Zuordnungen gelernt, nicht aus denen, die die Regel gesetzt hat.
+const unitFromLocation=(loc,cust,periodEnd)=>{const r=locationRule(loc,periodEnd);if(r)return r.unit;
+  const expired=LOCATION_RULES.find(x=>x.re.test(String(loc||'').trim()));
+  return learnedUnit(loc,cust,expired?.until)||matchUnit(loc)};
 const sameOwner=(issuer,owner)=>{const a=String(issuer||'').toLowerCase();return owner==='Torben Schmidt'?/torben|schmidt/.test(a):/psa/.test(a)};
 const normCo=s=>String(s||'').toLowerCase().replace(/\b(gmbh|co|kg|ag|ug|mbh|e\.?k|ohg|gbr|haftungsbeschränkt)\b/g,'').replace(/[^a-z0-9äöüß]/g,'');
 const sameCo=(a,b)=>{const x=normCo(a),y=normCo(b);return !!x&&!!y&&(x===y||x.includes(y)||y.includes(x))};
@@ -1479,7 +1488,7 @@ const findDup=(p,unitId)=>{const o=parsedOwner(p,unitId);return invoices.find(i=
 // Entscheidet, ob eine Rechnung ohne Rückfrage übernommen werden kann.
 function autoPlan(p){
   if(!(p&&p.number&&p.periodStart&&p.periodEnd&&p.periodEnd>=p.periodStart))return{action:'fail',reason:'nicht lesbar'};
-  const mu=unitFromLocation(p.location,p.customer), unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
+  const mu=unitFromLocation(p.location,p.customer,p.periodEnd), unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
   if(findDup(p,unitId))return{action:'skip',reason:'schon erfasst'};
   // Rechnungen bis Ende 2025 werden ohne Rückfrage eingepflegt (nur die Wohnung muss erkennbar sein)
   const old=p.periodEnd<'2026-01-01';
@@ -1503,7 +1512,7 @@ function autoPlan(p){
     if(!old&&cands[1]&&cands[1].score===top.score)return{action:'review',reason:'zwei Buchungen passen gleich gut'};
     st.target=top.b.id;return{action:'auto',st,unitId}}
   // Keine Personenzahl auf der Rechnung: wie viele Betten die Wohnung hat (im Notizfeld vermerkt)
-  if(!(+st.persons>0)){st.persons=UNIT[unitId].cap;st.notes='Personen = Bettenzahl (beim Import angenommen)'}
+  if(!(+st.persons>0)){const r=locationRule(p.location,p.periodEnd);st.persons=r?.persons||UNIT[unitId].cap;st.notes=r?.persons?'Personen laut Regel für „'+p.location+'“':'Personen = Bettenzahl (beim Import angenommen)'}
   st.target='new';return{action:'auto',st,unitId,isNew:true};
 }
 async function bulkInvoiceImport(files){
@@ -1571,11 +1580,11 @@ async function nextInvoice(){
 function drawInvoiceReview(file,p){
   const total=invQueue.length, n=invPos+1;
   const ok=p&&p.number&&p.periodStart;
-  const mu=ok?unitFromLocation(p.location,p.customer):null;
+  const mu=ok?unitFromLocation(p.location,p.customer,p.periodEnd):null;
   const unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
   const pr=ok?priceFromInvoice(p,unitId):{};
   const st={unitId:unitId||'',company:ok?p.customer:'',target:'',persons:pr.persons??'',price:pr.price??'',priceModel:pr.priceModel||'unit_night',extend:true,start:ok?p.periodStart:''};
-  if(unitId&&!(+st.persons>0)){st.persons=UNIT[unitId].cap;st.notes='Personen = Bettenzahl (beim Import angenommen)'}
+  if(unitId&&!(+st.persons>0)){const r=locationRule(p.location,p.periodEnd);st.persons=r?.persons||UNIT[unitId].cap;st.notes=r?.persons?'Personen laut Regel für „'+p.location+'“':'Personen = Bettenzahl (beim Import angenommen)'}
   const dup=ok?findDup(p,unitId):null;
   const f=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
   const next=()=>{invPos++;nextInvoice()};
