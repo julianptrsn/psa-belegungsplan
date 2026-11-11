@@ -174,7 +174,7 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .tl-cells .grid i{width:var(--day);flex:none;border-right:1px solid var(--line-soft)}
 .tl-cells .grid i.we{background:var(--weekend)}
 .tl-cells.can-add{cursor:copy}
-.todayline{position:absolute;top:0;bottom:0;width:2px;background:var(--today);z-index:1;pointer-events:none}
+.todayline{position:absolute;top:0;bottom:0;width:2px;background:var(--today);z-index:2;pointer-events:none}
 .bar{position:absolute;height:24px;border-radius:5px;background:var(--bar);color:var(--bar-fg);font-size:12px;font-weight:600;padding:3px 7px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;z-index:1;border:0;text-align:left;line-height:16px}
 .bar.res{background:var(--bar-res);color:var(--fg);outline:1.5px dashed var(--bar);outline-offset:-1.5px}
 .bar.over{box-shadow:inset 0 0 0 2px var(--bad)}
@@ -627,7 +627,6 @@ function renderTimeline(){
       if(canWrite)cells.addEventListener('click',e=>{if(e.target.closest('.bar'))return;const r=cells.getBoundingClientRect();const i=Math.floor((e.clientX-r.left)/(r.width/days));openDrawer(null,{unitId:uid,start:dayList[Math.max(0,Math.min(days-1,i))]})});
       (ob[uid]?.ranges||[]).forEach(r=>{const a=maxD(r.from,from),e=minD(r.to,to);if(e>a)cells.append(el('div',{class:'overday',title:'Überbelegung',style:'left:calc('+diff(from,a)+' * var(--day));width:calc('+diff(a,e)+' * var(--day))'}))});
       chg.filter(c=>c.unitId===uid&&c.day>=from&&c.day<to).forEach(c=>cells.append(el('div',{class:'chgday',style:'left:calc('+diff(from,c.day)+' * var(--day))'})));
-      if(TODAY>=from&&TODAY<to)cells.append(el('div',{class:'todayline',style:'left:calc('+diff(from,TODAY)+' * var(--day) + var(--day)/2 - 1px)'}));
       for(const b of bs){
         const s=maxD(b.start,from),e=minD(endOf(b),to);
         const x=diff(from,s),w=Math.max(1,diff(s,e));
@@ -653,6 +652,7 @@ function renderTimeline(){
           utilEl(bedNights(uid,from,to),cap*days,true))),cells));
     }
   }
+  if(TODAY>=from&&TODAY<to)out.splice(1,0,el('div',{class:'todayline',style:'left:calc(var(--lab) + '+diff(from,TODAY)+' * var(--day) + var(--day)/2 - 1px)'}));
   tl.replaceChildren(...out);
   $('#tl-hint').textContent=canWrite?'Tippe auf einen freien Tag in einer Zeile, um dort eine Buchung anzulegen. Die Zahl neben der Wohnung zeigt heute belegte Betten / Betten gesamt.':'Die Zahl neben der Wohnung zeigt heute belegte Betten / Betten gesamt.';
 }
