@@ -272,6 +272,7 @@ td .s{font-size:12px;color:var(--muted)}
       <button role="tab" id="tab-tl" data-view="tl" aria-selected="false">Belegungsplan</button>
       <button role="tab" id="tab-ls" data-view="ls" aria-selected="false">Buchungen</button>
     </div>
+    <button class="btn" id="btn-dep" hidden title="Bestätigte Abreise für eine Buchung eintragen">Abreise</button>
     <button class="btn" id="btn-inv" hidden title="Eine oder mehrere Rechnungen als PDF hochladen">Rechnung hochladen</button>
     <input type="file" id="inv-file" accept="application/pdf,.pdf" multiple hidden>
     <button class="btn primary" id="btn-new" hidden>+ Buchung</button>
@@ -286,7 +287,7 @@ td .s{font-size:12px;color:var(--muted)}
   <section class="view" id="view-ov">
     <div class="ov-grid">
       <div class="panel"><header><h2>Abrechnung fällig</h2><span>abgelaufene Nächte ohne Rechnung</span></header><ul class="rows" id="ov-due"></ul></div>
-      <div class="panel"><header><h2>Bestätigte Abreisen (21 Tage)</h2><span>Auszug fest zugesagt · wird frei</span></header><ul class="rows" id="ov-end"></ul></div>
+      <div class="panel"><header><h2>Bestätigte Abreisen (21 Tage)</h2><button class="btn small" id="btn-dep2" hidden>+ Abreise</button></header><ul class="rows" id="ov-end"></ul></div>
       <div class="panel"><header><h2>Freie Betten heute</h2><span id="ov-free-sum"></span></header><div class="freelist" id="ov-free"></div></div>
       <div class="panel"><header><h2>Anreisen in den nächsten 21 Tagen</h2><span>bestätigt &amp; reserviert</span></header><ul class="rows" id="ov-start"></ul></div>
       <div class="panel" id="ov-orphan-panel" hidden style="grid-column:1/-1"><header><h2>Rechnungen ohne Buchung</h2><span>die Buchung wurde gelöscht – tippen, um sie neu anzulegen</span></header><ul class="rows" id="ov-orphan"></ul></div>
@@ -494,6 +495,8 @@ function render(){
   ['ov','tl','ls'].forEach(v=>$('#view-'+v).hidden=v!==view);
   $('#btn-new').hidden=!canWrite;
   $('#btn-inv').hidden=!canWrite;
+  $('#btn-dep').hidden=!canWrite;
+  $('#btn-dep2').hidden=!canWrite;
   $('#btn-csv').hidden=!downloads;
   renderKpis();renderStatus();
   if(view==='ov')renderOverview();
@@ -1333,6 +1336,56 @@ async function fillInvoiceList(box,bookingId){
 
 /* ===== Rechnungen: Knopf & Drag-and-drop ===== */
 $('#btn-inv').addEventListener('click',()=>$('#inv-file').click());
+$('#btn-dep').addEventListener('click',()=>openDepartureDrawer());
+$('#btn-dep2').addEventListener('click',()=>openDepartureDrawer());
+
+/* ===== Abreise eintragen ===== */
+function openDepartureDrawer(preId){
+  if(!depReady){toast('Für bestätigte Abreisen fehlt noch ein Datenbank-Schritt (SQL 07).');return}
+  const list=SB().filter(b=>phase(b)!=='past'||b.departureConfirmed>=TODAY);
+  if(!list.length){toast('Keine laufenden oder kommenden Buchungen.');return}
+  editing={id:null,departure:true};
+  const order=Object.fromEntries(UNITS.map((u,i)=>[u.id,i]));
+  const byUnit={};list.slice().sort((a,c)=>order[a.unitId]-order[c.unitId]||(a.start<c.start?-1:1)).forEach(b=>(byUnit[b.unitId]=byUnit[b.unitId]||[]).push(b));
+  const sel=el('select',{id:'dp-booking'},el('option',{value:'',text:'Buchung wählen …'}),
+    allowedBuildings().map(bld=>{const opts=bld.units.flatMap(([uid,label])=>(byUnit[uid]||[]).map(b=>el('option',{value:b.id,text:(label==='Wohnung'?'':label+' · ')+(b.company||'Ohne Firma')+' · '+b.persons+' Pers.'+(b.departureConfirmed?' · Auszug '+fmt(b.departureConfirmed):'')})));
+      return opts.length?el('optgroup',{label:bld.name},...opts):null}).filter(Boolean));
+  const date=el('input',{id:'dp-date',type:'date'});
+  const info=el('div',{class:'calc'});
+  const saveBtn=el('button',{class:'btn primary'},'Abreise speichern');
+  const clearBtn=el('button',{class:'btn danger',hidden:true},'Bestätigung entfernen');
+  const cur=()=>bookings.find(b=>b.id===sel.value);
+  function upd(){
+    const b=cur();info.replaceChildren();clearBtn.hidden=!(b&&b.departureConfirmed);
+    if(!b){info.append(el('div',{},el('span',{text:'Wähle die Buchung, deren Auszug feststeht.'})));return}
+    if(!date.dataset.touched)date.value=b.departureConfirmed||'';
+    const row=(a,v)=>el('div',{},el('span',{text:a}),el('b',{text:v}));
+    info.append(row('Wohnung',unitName(b.unitId)),row('Anreise',fmt(b.start)),row('Personen',String(b.persons||0)),
+      row('Abgerechnet bis',fmt(b.invoicedUntil)),row('Bisheriges Ende',(b.extendedUntil||b.endOriginal)?fmt(b.extendedUntil||b.endOriginal):'offen'),
+      row('Bestätigte Abreise',b.departureConfirmed?fmt(b.departureConfirmed):'—'));
+    if(date.value&&b.invoicedUntil&&date.value>b.invoicedUntil)info.append(el('div',{style:'color:var(--warn);font-weight:600'},el('span',{text:'Bis zur Abreise fehlen noch '+diff(b.invoicedUntil,date.value)+' Nächte in den Rechnungen.'})));
+  }
+  sel.addEventListener('change',()=>{delete date.dataset.touched;upd()});
+  date.addEventListener('input',()=>{date.dataset.touched='1';upd()});
+  async function write(val){
+    const b=cur();if(!b){toast('Bitte eine Buchung wählen.');return}
+    if(val&&val<b.start){toast('Die Abreise darf nicht vor der Anreise ('+fmt(b.start)+') liegen.');return}
+    saveBtn.disabled=clearBtn.disabled=true;
+    const {data,error}=await sb.from('bookings').update({departure_confirmed:val||null}).eq('id',b.id).select('id');
+    saveBtn.disabled=clearBtn.disabled=false;
+    if(error||!data?.length){toast(error?'Speichern hat nicht geklappt: '+error.message:'Du hast für diesen Plan nur Leserechte.');return}
+    closeDrawer();toast(val?'Abreise am '+fmt(val)+' gespeichert':'Bestätigung entfernt');await loadBookings();
+  }
+  saveBtn.addEventListener('click',()=>{if(!date.value){toast('Bitte ein Datum wählen.');return}write(date.value)});
+  clearBtn.addEventListener('click',()=>write(null));
+  const f=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
+  $('#drawer-root').replaceChildren(el('div',{class:'scrim',onclick:closeDrawer}),el('div',{class:'drawer',role:'dialog','aria-modal':'true','aria-labelledby':'d-title'},
+    el('header',{},el('h2',{id:'d-title',text:'Abreise eintragen'}),el('button',{class:'btn small',onclick:closeDrawer,'aria-label':'Schließen'},'✕')),
+    el('div',{class:'body'},f('dp-booking','Buchung',sel),f('dp-date','Bestätigte Abreise (letzter Tag)',date,el('div',{class:'hint',text:'Der Tag, an dem die Monteure fest ausziehen.'})),info),
+    el('footer',{},clearBtn,el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Abbrechen'),saveBtn)));
+  if(preId){sel.value=preId}
+  upd();setTimeout(()=>sel.focus(),50);
+}
 $('#inv-file').addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';if(fs.length)startInvoiceImport(fs)});
 let dragDepth=0,dz=null;
 const hasFiles=e=>[...(e.dataTransfer?.types||[])].includes('Files');
