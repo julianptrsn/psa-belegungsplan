@@ -458,6 +458,9 @@ function nightsIn(b,from,to){const s=maxD(b.start,from),e=minD(endOf(b),to);retu
 // Umsatz eines Zeitraums [from,to): echte Rechnungsbeträge anteilig nach Leistungszeitraum,
 // geschätzt (Preis × Nächte) nur für Nächte, die noch keine Rechnung abdeckt.
 // Stornos und die von ihnen stornierten Rechnungen heben sich auf und zählen nirgends.
+// Rechnungen aus dem Tool: "bis" ist der Abreisetag (keine Nacht). Zervant-Importe: "bis" ist die letzte Nacht.
+const invEndExcl=i=>i.source==='tool'?i.period_end:addDays(i.period_end,1);
+const invLastNight=i=>i.source==='tool'?addDays(i.period_end,-1):i.period_end;
 const cancelledNumbers=()=>new Set(invoices.filter(i=>i.is_storno&&i.cancels).map(i=>i.cancels));
 const activeInvoices=()=>{const c=cancelledNumbers();return invoices.filter(i=>!i.is_storno&&!c.has(i.number))};
 function monthRevenue(from,to){
@@ -465,8 +468,8 @@ function monthRevenue(from,to){
   const covered={}; // booking_id -> abgedeckte Nächte im Zeitraum
   for(const i of activeInvoices()){
     if(!i.period_start||!i.period_end||!inScope(i.unit_id))continue;
-    const nights=diff(i.period_start,i.period_end)+1;
-    const ov=Math.max(0,diff(maxD(i.period_start,from),minD(addDays(i.period_end,1),to)));
+    const pEnd=invEndExcl(i), nights=diff(i.period_start,pEnd);
+    const ov=Math.max(0,diff(maxD(i.period_start,from),minD(pEnd,to)));
     if(!ov||nights<=0)continue;
     const share=ov/nights;
     const n=i.net!=null?+i.net:(i.total!=null&&i.vat!=null?+i.total-+i.vat:null);
@@ -1265,7 +1268,7 @@ function drawInvoiceReview(file,p){
 // "Abgerechnet bis" ohne die stornierte Rechnung: Ende der letzten noch gültigen Rechnung dieser Buchung.
 function invoicedUntilWithout(bookingId,cancelNo){
   const c=cancelledNumbers();if(cancelNo)c.add(cancelNo);
-  const ends=invoices.filter(i=>i.booking_id===bookingId&&!i.is_storno&&!c.has(i.number)&&i.period_end).map(i=>i.period_end).sort();
+  const ends=invoices.filter(i=>i.booking_id===bookingId&&!i.is_storno&&!c.has(i.number)&&i.period_end).map(invLastNight).sort();
   return ends.length?ends[ends.length-1]:'';
 }
 function drawStornoReview(file,p,head,next,unitId){
@@ -1683,8 +1686,8 @@ function calcInvoice(lines,o){
   return{lines:rows,rates,net,vat,total:r2(net+vat),lodging,base};
 }
 function defaultLines(b,from,to){
-  if(!b||!from||!to||to<from)return[{kind:'night',text:'Übernachtungen',qty:'',price:'',vat:7}];
-  const nights=diff(from,to)+1,p=+b.price||0,pers=+b.persons||0;
+  if(!b||!from||!to||to<=from)return[{kind:'night',text:'Übernachtungen',qty:'',price:'',vat:7}];
+  const nights=diff(from,to),p=+b.price||0,pers=+b.persons||0;
   switch(b.priceModel){
     case'pp_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(p*pers),vat:7}];
     case'unit_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:p,vat:7}];
@@ -1703,8 +1706,8 @@ function openInvoiceDrawer(preset){
   const b=preset.bookingId?bookings.find(x=>x.id===preset.bookingId):null;
   let from='',to='';
   if(b){from=b.invoicedUntil&&b.invoicedUntil>=b.start?addDays(b.invoicedUntil,1):b.start;
-    const ld=lastDay(b),monthEnd=addDays(addMonths(from,1),-1);
-    to=ld&&ld>=from&&ld<=addDays(from,62)?ld:minD(monthEnd,ld&&ld>=from?ld:monthEnd)}
+    const ld=lastDay(b),dep=ld&&ld>=from?addDays(ld,1):'',month=addMonths(from,1);
+    to=dep&&dep<=addDays(from,62)?dep:minD(month,dep||month)}
   const c=b?matchCustomer(b.company):null;
   invDraft={bookingId:b?.id||'',unitId:b?.unitId||(SU()[0]||UNITS[0]).id,customerId:c?.id||'',from,to,
     lines:defaultLines(b,from,to),payDays:c?c.payment_days:(bset?.default_payment_days??3),exempt:!!c?.lodging_exempt,exemptNote:c?.lodging_exempt_note||'',notes:'',
@@ -1766,7 +1769,7 @@ function drawInvoiceDrawer(){
     const c=customers.find(x=>x.id===d.customerId);
     custHint.textContent=c?[c.street,[c.zip,c.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')||'Adresse fehlt noch':(bk&&!matchCustomer(bk.company)?'„'+bk.company+'“ ist noch nicht als Kunde angelegt.':'');
     custHint.className='hint'+(c&&!c.street?' bad':'');
-    perHint.textContent=d.from&&d.to&&d.to>=d.from?(diff(d.from,d.to)+1)+' Nächte (letzte Nacht einschließlich)'+(bk&&bk.invoicedUntil&&d.from<=bk.invoicedUntil?' · Achtung: bis '+fmt(bk.invoicedUntil)+' ist schon abgerechnet':''):'Zeitraum der Leistung';
+    perHint.textContent=d.from&&d.to&&d.to>d.from?diff(d.from,d.to)+' Nächte (der Abreisetag zählt nicht)'+(bk&&bk.invoicedUntil&&d.from<=bk.invoicedUntil?' · Achtung: bis '+fmt(bk.invoicedUntil)+' ist schon abgerechnet':''):'Zeitraum der Leistung';
     perHint.className='hint'+(bk&&bk.invoicedUntil&&d.from&&d.from<=bk.invoicedUntil?' bad':'');
     payHint.textContent=+d.payDays?'fällig am '+fmt(addDays(TODAY,+d.payDays)):'sofort fällig';
     const lod=lodgingApplies(d.to);lodgeBox.hidden=!lod;
@@ -1799,7 +1802,7 @@ function drawInvoiceDrawer(){
     fld('iv-booking','Buchung',bookingSel,el('div',{class:'hint',text:'Aus der Buchung kommen Wohnung, Zeitraum und Preis. „Rechnung geschrieben bis“ wird danach automatisch gesetzt.'})),
     el('div',{class:'two'},fld('iv-unit','Wohnung',unitSel,el('div',{class:'hint',text:'Absender: '+(owner()||'—')})),
       el('div',{class:'field'},el('label',{for:'iv-cust',text:'Kunde'}),custSel,el('div',{class:'quick'},newCust),custHint)),
-    el('div',{class:'two'},fld('iv-from','Leistung von',fromIn),fld('iv-to','bis (letzter Tag)',toIn,perHint)),
+    el('div',{class:'two'},fld('iv-from','Leistung von',fromIn),fld('iv-to','bis (Abreisetag)',toIn,perHint)),
     el('div',{class:'sec',text:'Positionen'}),linesBox,
     lodgeBox,
     sum,
@@ -1819,7 +1822,7 @@ function buildDraftInvoice(preview){
     if(!c.street||!c.zip||!c.city){toast('Beim Kunden fehlt die vollständige Rechnungsadresse.');return null}
     if(!iss||!iss.name||!iss.street||!iss.iban||!(iss.tax_number||iss.vat_id)){toast('Absenderdaten für '+owner+' unvollständig (Einstellungen).');return null}
   }
-  if(!d.from||!d.to||d.to<d.from){toast('Bitte den Leistungszeitraum prüfen.');return null}
+  if(!d.from||!d.to||d.to<=d.from){toast('Bitte den Leistungszeitraum prüfen: Der Abreisetag muss nach dem ersten Tag liegen.');return null}
   const lines=d.lines.filter(l=>l.kind!=='abgabe');
   if(!lines.length||lines.some(l=>l.qty===''||l.price===''||!+l.qty||!(l.text||'').trim())){toast('Bitte alle Positionen mit Beschreibung, Menge und Preis ausfüllen.');return null}
   const lod=lodgingApplies(d.to);
@@ -1841,9 +1844,10 @@ async function createInvoice(inv){
   const row=data;
   const ok=await storeInvoicePdf(row);
   if(inv.booking_id){const b=bookings.find(x=>x.id===inv.booking_id);
-    if(b&&(!b.invoicedUntil||b.invoicedUntil<inv.period_end)){
-      const upd={invoiced_until:inv.period_end};
-      if(endOf(b)!==FAR&&inv.period_end>lastDay(b)){if(b.endOriginal)upd.extended_until=inv.period_end;else upd.end_original=inv.period_end}
+    const lastNight=addDays(inv.period_end,-1);
+    if(b&&(!b.invoicedUntil||b.invoicedUntil<lastNight)){
+      const upd={invoiced_until:lastNight};
+      if(endOf(b)!==FAR&&lastNight>lastDay(b)){if(b.endOriginal)upd.extended_until=lastNight;else upd.end_original=lastNight}
       const {error:be}=await sb.from('bookings').update(upd).eq('id',b.id);if(be)toast('Rechnung erstellt, aber „Rechnung geschrieben bis“ konnte nicht gesetzt werden.')}}
   await loadBookings();
   toast('Rechnung '+row.number+' erstellt'+(ok?'':' – PDF bitte erneut erzeugen'));
