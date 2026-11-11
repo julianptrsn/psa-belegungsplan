@@ -1464,8 +1464,9 @@ function autoPlan(p){
   const top=cands[0];
   if(top&&top.score>=4&&!(cands[1]&&cands[1].score===top.score)){st.target=top.b.id;return{action:'auto',st,unitId}}
   if(top&&top.score>=2)return{action:'review',reason:'Buchung nicht eindeutig'};
-  if(+st.persons>0){st.target='new';return{action:'auto',st,unitId,isNew:true}}
-  return{action:'review',reason:'keine Buchung, Personenzahl unbekannt'};
+  // Keine Personenzahl auf der Rechnung: wie viele Betten die Wohnung hat (im Notizfeld vermerkt)
+  if(!(+st.persons>0)){st.persons=UNIT[unitId].cap;st.notes='Personen = Bettenzahl (beim Import angenommen)'}
+  st.target='new';return{action:'auto',st,unitId,isNew:true};
 }
 async function bulkInvoiceImport(files){
   editing={id:null,invoice:true};
@@ -1524,6 +1525,7 @@ function drawInvoiceReview(file,p){
   const unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
   const pr=ok?priceFromInvoice(p,unitId):{};
   const st={unitId:unitId||'',company:ok?p.customer:'',target:'',persons:pr.persons??'',price:pr.price??'',priceModel:pr.priceModel||'unit_night',extend:true,start:ok?p.periodStart:''};
+  if(unitId&&!(+st.persons>0)){st.persons=UNIT[unitId].cap;st.notes='Personen = Bettenzahl (beim Import angenommen)'}
   const dup=ok?findDup(p,unitId):null;
   const f=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
   const next=()=>{invPos++;nextInvoice()};
@@ -1750,7 +1752,7 @@ async function saveStorno(file,p,st){
 async function saveInvoice(file,p,st){
   let bookingId=st.target;
   if(st.target==='new'){
-    const row=toRow({unitId:st.unitId,company:st.company,contact:'',persons:st.persons,start:st.start||p.periodStart,endOriginal:p.periodEnd,extendedUntil:'',price:st.price,priceModel:st.priceModel,invoicedUntil:p.periodEnd,state:'confirmed',notes:''});
+    const row=toRow({unitId:st.unitId,company:st.company,contact:'',persons:st.persons,start:st.start||p.periodStart,endOriginal:p.periodEnd,extendedUntil:'',price:st.price,priceModel:st.priceModel,invoicedUntil:p.periodEnd,state:'confirmed',notes:st.notes||''});
     const {data,error}=await sb.from('bookings').insert(row).select('id');
     if(error||!data?.length)throw new Error(error?.code==='42501'||!data?.length?'Du hast nur Leserechte.':'Buchung konnte nicht angelegt werden: '+error.message);
     bookingId=data[0].id;
