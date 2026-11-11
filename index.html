@@ -634,7 +634,7 @@ function monthRevenue(from,to){
   let net=0,gross=0,est=0;
   const covered={}; // booking_id -> abgedeckte Nächte im Zeitraum
   for(const i of activeInvoices()){
-    if(!i.period_start||!i.period_end||!inScope(i.unit_id))continue;
+    if(!i.period_start||!i.period_end||!invInScope(i))continue;
     const pEnd=invEndExcl(i), nights=diff(i.period_start,pEnd);
     const ov=Math.max(0,diff(maxD(i.period_start,from),minD(pEnd,to)));
     if(!ov||nights<=0)continue;
@@ -791,6 +791,8 @@ function statWindow(){
     return{from:first?first.slice(0,7)+'-01':mStart(0),to:addMonths(mStart(0),1),label:'Gesamt'}}
   return{from:mStart(11),to:addMonths(mStart(0),1),label:'Letzte 12 Monate'};
 }
+// Rechnungen ohne Wohnung (Reparaturen, Weiterberechnungen) gehören zum Absender
+const invInScope=i=>i.unit_id?inScope(i.unit_id):(!!i.issuer&&allowedOwner(i.issuer)&&(ownerSel==='all'||ownerSel===i.issuer));
 const invNet=i=>i.net!=null?+i.net:(i.total!=null&&i.vat!=null?+i.total-+i.vat:0);
 const niceMax=v=>{if(v<=0)return 1;const e=Math.pow(10,Math.floor(Math.log10(v)));const f=v/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e};
 const eurShort=v=>Math.abs(v)>=1000?(Math.round(v/100)/10).toLocaleString('de-DE')+' T€':Math.round(v).toLocaleString('de-DE')+' €';
@@ -801,13 +803,13 @@ function hideTip(){$('#chart-tip').hidden=true}
 function renderStats(){
   document.querySelectorAll('#st-range button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.r===statRange));
   const w=statWindow();
-  const inv=activeInvoices().filter(i=>i.invoice_date&&inScope(i.unit_id)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
+  const inv=activeInvoices().filter(i=>i.invoice_date&&invInScope(i)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
   // Stornos ohne erfasstes Original zählen negativ mit
-  const loose=invoices.filter(i=>i.is_storno&&!invoices.some(o=>o.number===i.cancels)&&i.invoice_date&&inScope(i.unit_id)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
+  const loose=invoices.filter(i=>i.is_storno&&!invoices.some(o=>o.number===i.cancels)&&i.invoice_date&&invInScope(i)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
   const all=[...inv,...loose];
   const sum=all.reduce((t,i)=>t+invNet(i),0);
   const mFrom=TODAY.slice(0,7)+'-01';
-  const month=activeInvoices().filter(i=>i.invoice_date&&inScope(i.unit_id)&&i.invoice_date>=mFrom&&i.invoice_date<=TODAY).reduce((t,i)=>t+invNet(i),0);
+  const month=activeInvoices().filter(i=>i.invoice_date&&invInScope(i)&&i.invoice_date>=mFrom&&i.invoice_date<=TODAY).reduce((t,i)=>t+invNet(i),0);
   $('#st-range-lbl').textContent=w.label;$('#st-sum').textContent=eur(sum);$('#st-month').textContent=eur(month);$('#st-count').textContent=String(inv.length);
   // Spalten
   const buckets=[];
@@ -839,14 +841,17 @@ function renderStats(){
   // Produkte aus Rechnungspositionen
   const byProd={};let missing=0;
   all.forEach(i=>{if(!Array.isArray(i.positions)||!i.positions.length){missing++;return}
-    i.positions.forEach(x=>{const k=prodGroup(x.d);const v=(x.q!=null&&x.u!=null)?x.q*x.u:0;byProd[k]=(byProd[k]||0)+v})});
+    i.positions.forEach(x=>{const k=prodGroup(x.d,i);const v=(x.q!=null&&x.u!=null)?x.q*x.u:0;byProd[k]=(byProd[k]||0)+v})});
   hbars($('#st-prod'),Object.entries(byProd).sort((a,c)=>c[1]-a[1]).slice(0,5),posReady?'Noch keine Positionsdaten in diesem Zeitraum.':'Für Produkte fehlt noch ein Datenbank-Schritt (SQL 08).');
   const note=$('#st-prod-note');note.replaceChildren();
   if(posReady&&missing){note.append(el('span',{text:missing+' Rechnung'+(missing===1?'':'en')+' ohne Positionsdaten.'}));
     if(canWrite)note.append(el('button',{class:'btn small',onclick:backfillPositions},'Aus gespeicherten PDFs nachladen'))}
 }
 // Positionen zusammenfassen: alle Übernachtungs- und alle Reinigungspositionen jeweils als eine Gruppe
-function prodGroup(d){const t=(d||'').trim();if(/übernacht|uebernacht/i.test(t))return'Übernachtungen';if(/reinig/i.test(t))return'Reinigungen';return t||'Ohne Bezeichnung'}
+function prodGroup(d,inv){const t=(d||'').trim();
+  if(inv&&/st(ö|oe)ver/i.test(inv.customer||''))return'Stöver';
+  if(inv&&!inv.unit_id||/reparatur|defekt|ersatz|schaden/i.test(t))return'Reparaturen';
+  if(/beherbergungsabgabe/i.test(t))return'Beherbergungsabgabe';if(/übernacht|uebernacht/i.test(t))return'Übernachtungen';if(/reinig/i.test(t))return'Reinigungen';return t||'Ohne Bezeichnung'}
 function hbars(box,rows,empty){
   if(!rows.length){box.replaceChildren(el('div',{class:'empty',style:'padding:0',text:empty}));return}
   const max=Math.max(...rows.map(r=>r[1]),1);
@@ -1487,6 +1492,7 @@ const parsedOwner=(p,unitId)=>unitId?UNIT[unitId].owner:(p&&p.issuer?(sameOwner(
 const findDup=(p,unitId)=>{const o=parsedOwner(p,unitId);return invoices.find(i=>i.number===p.number&&(!o||invOwner(i)===o))||null};
 // Entscheidet, ob eine Rechnung ohne Rückfrage übernommen werden kann.
 function autoPlan(p){
+  if(p&&p.number&&!p.periodStart&&p.net!=null&&!p.isStorno)return findDup(p,null)?{action:'skip',reason:'schon erfasst'}:{action:'other'};
   if(!(p&&p.number&&p.periodStart&&p.periodEnd&&p.periodEnd>=p.periodStart))return{action:'fail',reason:'nicht lesbar'};
   const mu=unitFromLocation(p.location,p.customer,p.periodEnd), unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
   if(findDup(p,unitId))return{action:'skip',reason:'schon erfasst'};
@@ -1528,13 +1534,16 @@ async function bulkInvoiceImport(files){
     let p=null;try{p=await readInvoicePdf(files[i])}catch(e){}
     items.push({file:files[i],p})}
   items.sort((a,c)=>((a.p&&a.p.periodStart)||'9')<((c.p&&c.p.periodStart)||'9')?-1:1);
-  const res={auto:[],created:[],skip:[],review:[],fail:[]};
+  const res={auto:[],created:[],other:[],skip:[],review:[],fail:[]};
   for(let i=0;i<items.length;i++){
     const {file,p}=items[i];
     if(stop){res.review.push({file,p,reason:'abgebrochen'});continue}
     prog('Übernehme '+(i+1)+' von '+items.length+' …',i,items.length);
     const plan=autoPlan(p);
-    if(plan.action==='storno'){
+    if(plan.action==='other'){
+      try{await saveOtherInvoice(file,p);res.other.push({file,p})}
+      catch(e){res.review.push({file,p,reason:e.message||'Ablegen fehlgeschlagen'})}
+    }else if(plan.action==='storno'){
       try{await saveStorno(file,p,plan.st);res.auto.push({file,p,unitId:plan.unitId})}
       catch(e){res.review.push({file,p,reason:e.message||'Storno fehlgeschlagen'})}
     }else if(plan.action==='auto'){
@@ -1552,11 +1561,12 @@ async function bulkInvoiceImport(files){
       el('div',{class:'sumbox'},
         el('div',{},el('span',{text:'Übernommen und Buchung zugeordnet'}),el('b',{text:String(res.auto.length)})),
         el('div',{},el('span',{text:'Übernommen, Buchung neu angelegt'}),el('b',{text:String(res.created.length)})),
+        res.other.length?el('div',{},el('span',{text:'Sonstige Rechnungen ohne Wohnung (z. B. Reparaturen) abgelegt'}),el('b',{text:String(res.other.length)})):null,
         el('div',{},el('span',{text:'Schon im Tool – übersprungen'}),el('b',{text:String(res.skip.length)})),
         el('div',{class:'tot'},el('span',{text:'Bitte selbst prüfen'}),el('b',{text:String(res.review.length)})),
         res.fail.length?el('div',{},el('span',{text:'Nicht lesbar (kein Text im PDF)'}),el('b',{text:String(res.fail.length)})):null),
       block('Bitte prüfen',res.review,x=>x.reason),block('Nicht lesbar',res.fail,()=>'—'),
-      block('Neu angelegte Buchungen',res.created),block('Zugeordnet',res.auto),block('Übersprungen',res.skip,()=>'schon erfasst')),
+      block('Neu angelegte Buchungen',res.created),block('Sonstige Rechnungen',res.other),block('Zugeordnet',res.auto),block('Übersprungen',res.skip,()=>'schon erfasst')),
     el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Schließen'),reviewBtn)));
 }
 let invAutoMode=false,invAutoCount=0;
@@ -1570,6 +1580,7 @@ async function nextInvoice(){
   // Nach einer Korrektur (z. B. Wohnung gewählt) gleichartige Rechnungen ohne Rückfrage übernehmen
   if(invAutoMode&&p){const plan=autoPlan(p);
     try{
+      if(plan.action==='other'){await saveOtherInvoice(file,p);invAutoCount++;invPos++;return nextInvoice()}
       if(plan.action==='auto'){await saveInvoice(file,p,plan.st);invAutoCount++;invPos++;return nextInvoice()}
       if(plan.action==='storno'){await saveStorno(file,p,plan.st);invAutoCount++;invPos++;return nextInvoice()}
       if(plan.action==='skip'){invPos++;return nextInvoice()}
@@ -1590,6 +1601,19 @@ function drawInvoiceReview(file,p){
   const next=()=>{invPos++;nextInvoice()};
 
   const head=el('header',{},el('h2',{id:'d-title',text:(ok&&p.isStorno?'Stornorechnung':'Rechnung')+(ok?' '+p.number:'')+(total>1?' · '+n+' von '+total:'')}),el('button',{class:'btn small',onclick:()=>{invQueue=[];closeDrawer()},'aria-label':'Schließen'},'✕'));
+  if(!ok&&p&&p.number&&p.net!=null&&!p.isStorno){
+    const dup=findDup(p,null);
+    const btn=el('button',{class:'btn primary'},'Als sonstige Rechnung ablegen');
+    btn.addEventListener('click',async()=>{btn.disabled=true;try{await saveOtherInvoice(file,p);toast('Rechnung '+p.number+' abgelegt');next()}catch(e){btn.disabled=false;toast(e.message||'Ablegen hat nicht geklappt.')}});
+    $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer',role:'dialog','aria-modal':'true'},head,
+      el('div',{class:'body'},el('div',{class:'invsum'},el('div',{class:'h'},el('span',{text:p.customer||'Kunde unbekannt'}),el('span',{class:'num',text:p.total!=null?eur2(p.total):''})),
+        el('dl',{},el('dt',{text:'Betreff'}),el('dd',{text:p.location||p.description||'—'}),el('dt',{text:'Datum'}),el('dd',{class:'num',text:fmt(p.date)}),
+          el('dt',{text:'Netto / USt.'}),el('dd',{class:'num',text:eur2(p.net)+' / '+(p.vat!=null?eur2(p.vat):'—')}))),
+        el('div',{class:'hint',text:'Rechnung ohne Wohnung und Zeitraum, z. B. eine Reparatur. Sie wird ohne Buchung abgelegt und zählt in der Statistik unter „'+(/st(ö|oe)ver/i.test(p.customer||'')?'Stöver':'Reparaturen')+'“.'}),
+        dup?el('div',{class:'warnbox',text:'Rechnung '+p.number+' ist schon erfasst.'}):null),
+      el('footer',{},el('button',{class:'btn',onclick:next},'Überspringen'),el('span',{class:'grow'}),dup?null:btn)));
+    return;
+  }
   if(!ok){
     $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer',role:'dialog','aria-modal':'true'},head,
       el('div',{class:'body'},el('div',{class:'warnbox',text:'Aus „'+file.name+'“ konnten keine Rechnungsdaten gelesen werden. Ist es eine Rechnung aus eurer Vorlage (kein Scan)?'})),
@@ -1808,6 +1832,25 @@ async function saveStorno(file,p,st){
   await loadBookings();
 }
 
+// Sonstige Rechnung (ohne Wohnung/Zeitraum): nur Rechnung + PDF, keine Buchung
+async function saveOtherInvoice(file,p){
+  const owner=parsedOwner(p,null)||'PSA Immobilien';
+  const date=p.date||TODAY, vr=p.net?Math.round(+p.vat/+p.net*1000)/10:null;
+  const title=(p.location||p.description||'Sonstige Leistung').trim();
+  const pos=(p.positions||[]).filter(x=>x.quantity!=null&&x.unitPrice!=null&&x.vatRate!=null&&x.vatRate<=25);
+  const positions=pos.length?posJson({positions:pos}):[{d:title,q:1,u:+p.net,v:vr}];
+  const row={number:p.number,invoice_date:date,due_date:p.due||null,customer:p.customer||'Unbekannt',unit_id:null,location_text:title,
+    period_start:date,period_end:date,quantity:1,unit_price:+p.net,vat_rate:vr,net:p.net,vat:p.vat,total:p.total,booking_id:null,issuer:owner,
+    ...(posReady?{positions}:{})};
+  const safe=String(p.number).replace(/[^A-Za-z0-9._-]/g,'_');
+  let filePath=date.slice(0,4)+'/'+safe+'.pdf';
+  const up=await sb.storage.from('rechnungen').upload(filePath,file,{contentType:'application/pdf',upsert:false});
+  if(up.error){const alt=filePath.replace('.pdf','-'+Date.now()+'.pdf');const up2=await sb.storage.from('rechnungen').upload(alt,file,{contentType:'application/pdf'});filePath=up2.error?null:alt}
+  let {error}=await sb.from('invoices').insert({...row,file_path:filePath});
+  if(error&&/issuer/.test(error.message||'')){const r={...row};delete r.issuer;({error}=await sb.from('invoices').insert({...r,file_path:filePath}))}
+  if(error)throw new Error(error.code==='23505'?'Rechnung '+p.number+' ist schon erfasst.':'Rechnung konnte nicht abgelegt werden: '+error.message);
+  await loadBookings();
+}
 async function saveInvoice(file,p,st){
   let bookingId=st.target;
   if(st.target==='new'){
@@ -1964,7 +2007,7 @@ const isOpenInv=i=>['open','overdue'].includes(invStatus(i).key);
 
 function renderOverdue(){
   const p=$('#ov-overdue-panel');if(!p)return;
-  const list=billingReady?invoices.filter(i=>inScope(i.unit_id)&&invStatus(i).key==='overdue').sort((a,c)=>a.due_date<c.due_date?-1:1):[];
+  const list=billingReady?invoices.filter(i=>invInScope(i)&&invStatus(i).key==='overdue').sort((a,c)=>a.due_date<c.due_date?-1:1):[];
   p.hidden=!list.length;
   $('#ov-overdue-sum').textContent=list.length?eur2(list.reduce((s,i)=>s+(+i.total||0),0))+' offen':'';
   $('#ov-overdue').replaceChildren(...list.map(i=>{const st=invStatus(i);
@@ -2007,7 +2050,7 @@ function renderBilling(){
     return;
   }
   head.replaceChildren(el('tr',{},el('th',{text:'Nr.'}),el('th',{text:'Datum'}),el('th',{text:'Kunde'}),el('th',{text:'Wohnung · Zeitraum'}),el('th',{class:'r',text:'Brutto'}),el('th',{text:'Status'})));
-  let list=invoices.filter(i=>inScope(i.unit_id)||(!i.unit_id&&canWrite));
+  let list=invoices.filter(invInScope);
   list=list.filter(i=>{const k=invStatus(i).key;
     if(rgFilter==='open')return k==='open'||k==='overdue';
     if(rgFilter==='overdue')return k==='overdue';
