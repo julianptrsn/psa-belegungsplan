@@ -1553,7 +1553,11 @@ async function bulkInvoiceImport(files){
   for(let i=0;i<files.length&&!stop;i++){prog('Lese '+(i+1)+' von '+files.length+' …',i,files.length);
     let p=null;try{p=await readInvoicePdf(files[i])}catch(e){}
     items.push({file:files[i],p})}
-  items.sort((a,c)=>((a.p&&a.p.periodStart)||'9')<((c.p&&c.p.periodStart)||'9')?-1:1);
+  // Reihenfolge wie in Zervant: nach Leistungsbeginn, bei gleichem Beginn nach Rechnungsnummer
+  // (Original → Storno → Neuberechnung), damit Stornos ihr Original schon vorfinden.
+  const numKey=n=>String(n||'').replace(/\d+/g,d=>d.padStart(8,'0'));
+  items.sort((a,c)=>{const sa=(a.p&&a.p.periodStart)||'9',sc=(c.p&&c.p.periodStart)||'9';
+    if(sa!==sc)return sa<sc?-1:1;const na=numKey(a.p&&a.p.number),nc=numKey(c.p&&c.p.number);return na<nc?-1:na>nc?1:0});
   const res={auto:[],created:[],other:[],skip:[],review:[],fail:[]};
   for(let i=0;i<items.length;i++){
     const {file,p}=items[i];
@@ -1572,6 +1576,7 @@ async function bulkInvoiceImport(files){
     }else res[plan.action].push({file,p,reason:plan.reason});
   }
   await loadBookings();
+  res.trimmed=await trimStornoBookings();
   const row=(x,extra)=>el('span',{class:'row'},el('span',{text:(x.p&&x.p.number?x.p.number+' · ':'')+((x.p&&x.p.customer)||x.file.name)+(x.unitId?' · '+unitName(x.unitId):'')}),el('b',{text:extra||(x.p&&x.p.total!=null?eur2(x.p.total):'')}));
   const block=(title,list,extra)=>list.length?el('details',{open:list===res.review||list===res.fail},el('summary',{style:'cursor:pointer;font-weight:600;padding:4px 0',text:title+' ('+list.length+')'}),el('div',{class:'invlist',style:'margin-top:6px'},list.map(x=>row(x,extra&&extra(x))))):null;
   const reviewBtn=res.review.length?el('button',{class:'btn primary',onclick:()=>{invQueue=res.review.map(x=>x.file);invPos=0;invAutoMode=true;invAutoCount=0;nextInvoice()}},res.review.length+' jetzt prüfen'):null;
@@ -1582,6 +1587,7 @@ async function bulkInvoiceImport(files){
         el('div',{},el('span',{text:'Übernommen und Buchung zugeordnet'}),el('b',{text:String(res.auto.length)})),
         el('div',{},el('span',{text:'Übernommen, Buchung neu angelegt'}),el('b',{text:String(res.created.length)})),
         res.other.length?el('div',{},el('span',{text:'Sonstige Rechnungen ohne Wohnung (z. B. Reparaturen) abgelegt'}),el('b',{text:String(res.other.length)})):null,
+        res.trimmed?el('div',{},el('span',{text:'Buchungen nach Storno gekürzt'}),el('b',{text:String(res.trimmed)})):null,
         el('div',{},el('span',{text:'Schon im Tool – übersprungen'}),el('b',{text:String(res.skip.length)})),
         el('div',{class:'tot'},el('span',{text:'Bitte selbst prüfen'}),el('b',{text:String(res.review.length)})),
         res.fail.length?el('div',{},el('span',{text:'Nicht lesbar (kein Text im PDF)'}),el('b',{text:String(res.fail.length)})):null),
@@ -1853,6 +1859,27 @@ async function saveStorno(file,p,st){
 }
 
 // Sonstige Rechnung (ohne Wohnung/Zeitraum): nur Rechnung + PDF, keine Buchung
+// Nach Stornos: Wurde ein Zeitraum storniert und nur kürzer neu berechnet (z. B. 03.–30.11. storniert, neu 03.–11.11.),
+// endet die Buchung am Ende der letzten gültigen Rechnung. Läuft nach jedem Sammelimport über alle Buchungen mit Storno.
+async function trimStornoBookings(){
+  let n=0;const canc=cancelledNumbers();
+  for(const b of bookings){
+    const own=invoices.filter(i=>i.booking_id===b.id);
+    const stornos=own.filter(i=>i.is_storno&&i.period_start&&i.period_end);
+    if(!stornos.length)continue;
+    const ld=lastDay(b);if(!ld)continue;
+    const valid=own.filter(i=>!i.is_storno&&!isCancelled(canc,i)&&i.period_end).map(invLastNight).sort();
+    const validEnd=valid.length?valid[valid.length-1]:'';
+    if(!validEnd||validEnd>=ld||validEnd<b.start)continue;
+    if(!stornos.some(st=>st.period_start<=ld&&st.period_end>=ld))continue;
+    if(b.departureConfirmed&&b.departureConfirmed>validEnd)continue;
+    const upd=b.endOriginal&&b.endOriginal<=validEnd?{extended_until:validEnd}:{end_original:validEnd,extended_until:null};
+    upd.invoiced_until=validEnd;
+    const {error}=await sb.from('bookings').update(upd).eq('id',b.id);if(!error)n++;
+  }
+  if(n)await loadBookings();
+  return n;
+}
 async function saveOtherInvoice(file,p){
   const owner=parsedOwner(p,null)||'PSA Immobilien';
   const date=p.date||TODAY, vr=p.net?Math.round(+p.vat/+p.net*1000)/10:null;
