@@ -1783,7 +1783,7 @@ async function saveInvoice(file,p,st){
   if(st.target==='new'){
     const row=toRow({unitId:st.unitId,company:st.company,contact:'',persons:st.persons,start:st.start||p.periodStart,endOriginal:p.periodEnd,extendedUntil:'',price:st.price,priceModel:st.priceModel,invoicedUntil:p.periodEnd,state:'confirmed',notes:st.notes||''});
     const {data,error}=await sb.from('bookings').insert(row).select('id');
-    if(error||!data?.length)throw new Error(error?.code==='42501'||!data?.length?'Du hast nur Leserechte.':'Buchung konnte nicht angelegt werden: '+error.message);
+    if(error||!data?.length){console.error('Buchung anlegen',error,row);throw new Error('Buchung konnte nicht angelegt werden'+(error?' ('+(error.code||'')+'): '+error.message:': Die Datenbank hat die neue Buchung nicht zurückgegeben (Zugriffsregel).'))}
     bookingId=data[0].id;
   }else{
     const b=bookings.find(x=>x.id===bookingId);
