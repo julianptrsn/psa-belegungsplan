@@ -134,7 +134,8 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin-left:auto}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{display:inline-block;width:18px;height:10px;border-radius:3px}
-.tl-scroll{overflow:auto;max-height:calc(100vh - 90px);max-height:calc(100dvh - 90px - env(safe-area-inset-top,0px));overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:10px;-webkit-overflow-scrolling:touch}
+.tl-scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;-webkit-overflow-scrolling:touch}
+.tl-headwrap{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--barh,52px));z-index:5;overflow:hidden;background:var(--surface);border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0}
 .tl{--day:30px;--lab:190px;position:relative;width:calc(var(--lab) + var(--days) * var(--day))}
 @media (max-width:600px){.tl{--day:26px;--lab:118px}}
 .tl-head,.tl-row{display:flex}
@@ -312,7 +313,8 @@ td .s{font-size:12px;color:var(--muted)}
         <span><i style="background:var(--warn);height:4px"></i>noch nicht abgerechnet</span>
       </div>
     </div>
-    <div class="tl-scroll"><div class="tl" id="tl"></div></div>
+    <div class="tl-headwrap" id="tl-headwrap"><div class="tl" id="tl-head"></div></div>
+    <div class="tl-scroll" id="tl-scroll"><div class="tl" id="tl"></div></div>
     <p class="ro-note" id="tl-hint"></p>
   </section>
 
@@ -604,7 +606,7 @@ function utilEl(used,capN,bar){
 function renderTimeline(){
   const from=tlMonth+'-01', to=addMonths(from,1), days=diff(from,to);
   $('#tl-month').textContent=new Date(toT(from)).toLocaleDateString('de-DE',{month:'long',year:'numeric',timeZone:'UTC'});
-  const tl=$('#tl');tl.style.setProperty('--days',days);
+  const tl=$('#tl');tl.style.setProperty('--days',days);$('#tl-head').style.setProperty('--days',days);
   const dayList=[...Array(days)].map((_,i)=>addDays(from,i));
   const isWe=d=>{const w=new Date(toT(d)).getUTCDay();return w===0||w===6};
   const wd=['So','Mo','Di','Mi','Do','Fr','Sa'];
@@ -612,7 +614,8 @@ function renderTimeline(){
     el('div',{class:'tl-days'},dayList.map(d=>el('div',{class:'tl-day'+(isWe(d)?' we':'')+(d===TODAY?' td':'')},el('b',{text:String(+d.slice(8))}),wd[new Date(toT(d)).getUTCDay()]))));
   const ob=overbooked(bookings);const overIds=new Set(Object.values(ob).flatMap(o=>o.ids));
   const chg=changeovers(bookings);const chgIds=new Map();chg.forEach(c=>[...c.leave,...c.arrive].forEach(id=>chgIds.set(id,c)));
-  const out=[head];
+  $('#tl-head').replaceChildren(head);
+  const out=[];
   const cs=getComputedStyle(tl);const dayPx=()=>parseFloat(cs.getPropertyValue('--day'))||30;
   for(const bld of allowedBuildings().filter(b=>ownerSel==='all'||b.owner===ownerSel)){
     const bUsed=bld.units.reduce((t,[uid])=>t+bedNights(uid,from,to),0), bCap=bld.units.reduce((t,u)=>t+u[2],0)*days;
@@ -652,8 +655,9 @@ function renderTimeline(){
           utilEl(bedNights(uid,from,to),cap*days,true))),cells));
     }
   }
-  if(TODAY>=from&&TODAY<to)out.splice(1,0,el('div',{class:'todayline',style:'left:calc(var(--lab) + '+diff(from,TODAY)+' * var(--day) + var(--day)/2 - 1px)'}));
+  if(TODAY>=from&&TODAY<to)out.unshift(el('div',{class:'todayline',style:'left:calc(var(--lab) + '+diff(from,TODAY)+' * var(--day) + var(--day)/2 - 1px)'}));
   tl.replaceChildren(...out);
+  syncHead();
   $('#tl-hint').textContent=canWrite?'Tippe auf einen freien Tag in einer Zeile, um dort eine Buchung anzulegen. Die Zahl neben der Wohnung zeigt heute belegte Betten / Betten gesamt.':'Die Zahl neben der Wohnung zeigt heute belegte Betten / Betten gesamt.';
 }
 
@@ -837,6 +841,15 @@ function exportCsv(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='belegungsplan-'+TODAY+'.csv';document.body.append(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
 }
+/* ===== Datumszeile im Belegungsplan ===== */
+function syncHead(){
+  const sc=$('#tl-scroll'),hw=$('#tl-headwrap');if(!sc||!hw)return;
+  hw.scrollLeft=sc.scrollLeft;
+  const bar=document.querySelector('.tl-bar');if(bar)document.documentElement.style.setProperty('--barh',bar.offsetHeight+'px');
+}
+$('#tl-scroll').addEventListener('scroll',()=>{$('#tl-headwrap').scrollLeft=$('#tl-scroll').scrollLeft},{passive:true});
+window.addEventListener('resize',syncHead);
+
 /* ===== Events ===== */
 function applyOwnerSelect(){
   const sel=$('#owner-sel');
