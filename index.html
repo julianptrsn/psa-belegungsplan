@@ -118,10 +118,12 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .pill.info{background:var(--accent-soft);color:var(--accent)}
 .pill.neutral{background:var(--sunk);color:var(--muted)}
 /* Statistik */
-.stats-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:28px 0 12px}
+.stats-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px}
+.stats-grid{margin-bottom:22px}
 .stats-head h2{margin:0;font-size:17px}
 .stats-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px}
-.stats-grid .st-sales{grid-row:span 2}
+.stats-grid .st-sales{grid-row:span 2;display:flex;flex-direction:column}
+.stats-grid .st-sales .vchart{flex:1;height:auto;min-height:240px}
 @media (max-width:860px){.stats-grid{grid-template-columns:1fr}.stats-grid .st-sales{grid-row:auto}}
 .st-figs{display:flex;flex-wrap:wrap;gap:12px 36px;padding:14px 16px 0}
 .st-figs .lbl{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
@@ -187,6 +189,7 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .util.lv-bad{color:var(--bad);font-weight:600}.util.lv-bad i b,.meter i.lv-bad{background:var(--bad)}
 .util.lv-warn{color:var(--warn);font-weight:600}.util.lv-warn i b,.meter i.lv-warn{background:var(--warn)}
 .util.lv-ok{color:var(--ok);font-weight:600}.util.lv-ok i b,.meter i.lv-ok{background:var(--ok)}
+.kpi .sub span.lv-bad{color:var(--bad)}.kpi .sub span.lv-warn{color:var(--warn)}.kpi .sub span.lv-ok{color:var(--ok)}
 .kpi .sub.lv-bad{color:var(--bad);font-weight:600}.kpi .sub.lv-warn{color:var(--warn);font-weight:600}.kpi .sub.lv-ok{color:var(--ok);font-weight:600}
 .tl-group .util{margin-left:auto;font-weight:500}
 .tl-group .tl-lab{display:flex;align-items:center;gap:6px}
@@ -391,7 +394,7 @@ body{background:
   <button class="iconbtn gold" id="btn-new-m" aria-label="Neue Buchung" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
 </header>
 <aside class="side" id="side">
-  <div class="side-brand"><span class="mk"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#163A43"/><path d="M21 38 L32 28 L43 38" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.5 37 V47 H39.5 V37" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="29.5" y="39.5" width="5" height="5" rx="1" fill="#E7A33E"/><path d="M18 52 q3.6 -3.2 7.2 0 t7.2 0 t7.2 0 t7.2 0" fill="none" stroke="#6FA0B0" stroke-width="2.2" stroke-linecap="round"/><g transform="translate(23.8,16) scale(0.9)" fill="#F5F1EA"><ellipse cx="9.5" cy="7.3" rx="4.9" ry="2.8"/><circle cx="4.9" cy="5.2" r="2"/><path d="M3.1 5 L0.5 5.9 L3.3 6.6 Z"/><path d="M13.4 6.4 L17.8 5.1 L14 8.3 Z"/><rect x="7.1" y="9.5" width="0.85" height="3.4" rx=".3"/><rect x="9.5" y="9.5" width="0.85" height="3.4" rx=".3"/></g></svg></span><div><b>Monteur Apartments</b><small>Verwaltung · PSA Immobilien</small></div></div>
+  <div class="side-brand"><span class="mk"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#163A43"/><path d="M21 38 L32 28 L43 38" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.5 37 V47 H39.5 V37" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="29.5" y="39.5" width="5" height="5" rx="1" fill="#E7A33E"/><path d="M18 52 q3.6 -3.2 7.2 0 t7.2 0 t7.2 0 t7.2 0" fill="none" stroke="#6FA0B0" stroke-width="2.2" stroke-linecap="round"/><g transform="translate(23.8,16) scale(0.9)" fill="#F5F1EA"><ellipse cx="9.5" cy="7.3" rx="4.9" ry="2.8"/><circle cx="4.9" cy="5.2" r="2"/><path d="M3.1 5 L0.5 5.9 L3.3 6.6 Z"/><path d="M13.4 6.4 L17.8 5.1 L14 8.3 Z"/><rect x="7.1" y="9.5" width="0.85" height="3.4" rx=".3"/><rect x="9.5" y="9.5" width="0.85" height="3.4" rx=".3"/></g></svg></span><div><b>Monteur Apartments Flensburg</b><small>Verwaltung · PSA Immobilien</small></div></div>
   <div class="side-lbl">Menü</div>
   <nav class="side-nav" role="tablist" aria-label="Ansichten">
     <button class="nav-item" role="tab" id="tab-ov" data-view="ov" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z"/></svg><span>Übersicht</span></button>
@@ -419,16 +422,6 @@ body{background:
   <div id="status-line"></div>
 
   <section class="view" id="view-ov">
-    <div class="ov-grid">
-      <div class="panel"><header><h2>Abrechnung fällig</h2><span>abgelaufene Nächte ohne Rechnung</span></header><ul class="rows" id="ov-due"></ul></div>
-      <div class="panel"><header><h2>Bestätigte Abreisen (21 Tage)</h2><button class="btn small" id="btn-dep2" hidden>+ Abreise</button></header><ul class="rows" id="ov-end"></ul></div>
-      <div class="panel"><header><h2>Freie Betten heute</h2><span id="ov-free-sum"></span></header><div class="freelist" id="ov-free"></div></div>
-      <div class="panel"><header><h2>Anreisen in den nächsten 21 Tagen</h2><span>bestätigt &amp; reserviert</span></header><ul class="rows" id="ov-start"></ul></div>
-      <div class="panel" id="ov-orphan-panel" hidden style="grid-column:1/-1"><header><h2>Rechnungen ohne Buchung</h2><span>die Buchung wurde gelöscht – tippen, um sie neu anzulegen</span></header><ul class="rows" id="ov-orphan"></ul></div>
-      <div class="panel" id="ov-open-panel" hidden style="grid-column:1/-1"><header><h2>Ohne Abreise und ohne Rechnung</h2><span>gelten als belegt ohne Ende – bitte Abreise eintragen</span></header><ul class="rows" id="ov-open"></ul></div>
-      <div class="panel" id="ov-chg-panel" hidden style="grid-column:1/-1"><header><h2>Wechseltage</h2><span>Abreise und Anreise am selben Tag – Reinigung und Schlüssel gut planen</span></header><ul class="rows" id="ov-chg"></ul></div>
-      <div class="panel" id="ov-over-panel" hidden style="grid-column:1/-1"><header><h2>Überbelegung</h2><span>mehr Personen als Betten</span></header><ul class="rows" id="ov-over"></ul></div>
-    </div>
     <div class="stats-head">
       <h2>Statistik</h2>
       <div class="seg" id="st-range" role="group" aria-label="Zeitraum">
@@ -448,6 +441,16 @@ body{background:
       </div>
       <div class="panel"><header><h2>Hauptkunden</h2><span id="st-cust-sub">netto</span></header><div class="hbars" id="st-cust"></div></div>
       <div class="panel"><header><h2>Hauptprodukte und Dienstleistungen</h2><span>netto</span></header><div class="hbars" id="st-prod"></div><div id="st-prod-note"></div></div>
+    </div>
+    <div class="ov-grid">
+      <div class="panel"><header><h2>Abrechnung fällig</h2><span>abgelaufene Nächte ohne Rechnung</span></header><ul class="rows" id="ov-due"></ul></div>
+      <div class="panel"><header><h2>Bestätigte Abreisen (21 Tage)</h2><button class="btn small" id="btn-dep2" hidden>+ Abreise</button></header><ul class="rows" id="ov-end"></ul></div>
+      <div class="panel"><header><h2>Freie Betten heute</h2><span id="ov-free-sum"></span></header><div class="freelist" id="ov-free"></div></div>
+      <div class="panel"><header><h2>Anreisen in den nächsten 21 Tagen</h2><span>bestätigt &amp; reserviert</span></header><ul class="rows" id="ov-start"></ul></div>
+      <div class="panel" id="ov-orphan-panel" hidden style="grid-column:1/-1"><header><h2>Rechnungen ohne Buchung</h2><span>die Buchung wurde gelöscht – tippen, um sie neu anzulegen</span></header><ul class="rows" id="ov-orphan"></ul></div>
+      <div class="panel" id="ov-open-panel" hidden style="grid-column:1/-1"><header><h2>Ohne Abreise und ohne Rechnung</h2><span>gelten als belegt ohne Ende – bitte Abreise eintragen</span></header><ul class="rows" id="ov-open"></ul></div>
+      <div class="panel" id="ov-chg-panel" hidden style="grid-column:1/-1"><header><h2>Wechseltage</h2><span>Abreise und Anreise am selben Tag – Reinigung und Schlüssel gut planen</span></header><ul class="rows" id="ov-chg"></ul></div>
+      <div class="panel" id="ov-over-panel" hidden style="grid-column:1/-1"><header><h2>Überbelegung</h2><span>mehr Personen als Betten</span></header><ul class="rows" id="ov-over"></ul></div>
     </div>
     <div class="chart-tip" id="chart-tip" hidden></div>
   </section>
@@ -700,7 +703,9 @@ function renderKpis(){
   const v=(a,b)=>{const d=el('div',{class:'val'});d.append(a);if(b)d.append(el('small',{text:' '+b}));return d};
   $('#kpis').replaceChildren(
     (()=>{const raw=scopeBeds?beds/scopeBeds*100:0,lv=utilLevel(raw);const c=k('Betten belegt heute',v(String(beds),'/ '+scopeBeds),pct+' % Auslastung',el('div',{class:'meter'},el('i',{class:lv,style:'width:'+Math.min(100,pct)+'%'})));c.querySelector('.sub').classList.add(lv);return c})(),
-    k('Wohnungen belegt',v(String(units),'/ '+SU().length),(SU().length-units)+' komplett frei'),
+    (()=>{const n=SU().length,raw=n?units/n*100:0,lv=utilLevel(raw),pu=Math.round(raw);
+      const c=k('Wohnungen belegt',v(String(units),'/ '+n),pu+' % Auslastung · '+(n-units)+' komplett frei',el('div',{class:'meter'},el('i',{class:lv,style:'width:'+Math.min(100,pu)+'%'})));
+      const sub=c.querySelector('.sub');sub.replaceChildren(el('span',{class:lv,style:'font-weight:600',text:pu+' % Auslastung'}),document.createTextNode(' · '+(n-units)+' komplett frei'));return c})(),
     k('Noch nicht abgerechnet',v(eur(open)),openN?openN+' Buchung'+(openN>1?'en':'')+' mit offenen Nächten':'alles abgerechnet'),
     k('Umsatz '+new Date(toT(mFrom)).toLocaleDateString('de-DE',{month:'long',timeZone:'UTC'})+' (netto)',v(eur(rev.net+rev.est)),
       !rev.est&&!rev.net?'noch keine Buchungen':
