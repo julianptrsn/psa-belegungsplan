@@ -129,18 +129,18 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .chip b{font-family:var(--font-num);font-weight:500}
 
 /* Timeline */
-.tl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px}
+.tl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-block:8px;margin-bottom:2px;position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--bg)}
 .tl-bar .month{font-size:18px;font-weight:700;font-stretch:110%;min-width:150px}
 .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin-left:auto}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{display:inline-block;width:18px;height:10px;border-radius:3px}
-.tl-scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;-webkit-overflow-scrolling:touch}
+.tl-scroll{overflow:auto;max-height:calc(100vh - 90px);max-height:calc(100dvh - 90px - env(safe-area-inset-top,0px));overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:10px;-webkit-overflow-scrolling:touch}
 .tl{--day:30px;--lab:190px;position:relative;width:calc(var(--lab) + var(--days) * var(--day))}
 @media (max-width:600px){.tl{--day:26px;--lab:118px}}
 .tl-head,.tl-row{display:flex}
-.tl-head{position:sticky;top:0;z-index:3;background:var(--surface);border-bottom:1px solid var(--line)}
+.tl-head{position:sticky;top:0;z-index:4;background:var(--surface);border-bottom:1px solid var(--line)}
 .tl-lab{position:sticky;left:0;z-index:2;flex:none;width:var(--lab);background:var(--surface);border-right:1px solid var(--line);padding:6px 10px;min-width:0}
-.tl-head .tl-lab{font-size:12px;color:var(--muted);display:flex;align-items:flex-end}
+.tl-head .tl-lab{z-index:5;font-size:12px;color:var(--muted);display:flex;align-items:flex-end}
 .tl-days{display:flex;flex:none}
 .tl-day{width:var(--day);flex:none;text-align:center;font-size:11px;color:var(--muted);padding:4px 0;line-height:1.2}
 .tl-day b{display:block;font-family:var(--font-num);font-weight:500;font-size:12px;color:var(--fg)}
