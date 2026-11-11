@@ -1378,6 +1378,14 @@ function matchUnit(location){
   const cand=bld.units.filter(([id,label])=>{const k=floorKey(label);const k2=k.replace('rechts','r').replace('links','l');return k===rest||k2===rest||(rest.length>=2&&(k.startsWith(rest)||rest.startsWith(k)))||(rest.length>=4&&k.includes(rest))});
   return cand.length===1?cand[0][0]:(bld.units.length===1?bld.units[0][0]:null);
 }
+// Gelernt: Wie wurde dieselbe Objektangabe bei früheren Rechnungen zugeordnet? (auch manuelle Korrekturen)
+const normLoc=s=>String(s||'').toLowerCase().replace(/ß/g,'ss').replace(/[^a-z0-9äöü]/g,'');
+function learnedUnit(location){
+  const k=normLoc(location);if(!k)return null;
+  const cnt={};invoices.forEach(i=>{if(i.unit_id&&UNIT[i.unit_id]&&normLoc(i.location_text)===k)cnt[i.unit_id]=(cnt[i.unit_id]||0)+1});
+  const best=Object.entries(cnt).sort((a,c)=>c[1]-a[1])[0];return best?best[0]:null;
+}
+const unitFromLocation=loc=>learnedUnit(loc)||matchUnit(loc);
 const sameOwner=(issuer,owner)=>{const a=String(issuer||'').toLowerCase();return owner==='Torben Schmidt'?/torben|schmidt/.test(a):/psa/.test(a)};
 const normCo=s=>String(s||'').toLowerCase().replace(/\b(gmbh|co|kg|ag|ug|mbh|e\.?k|ohg|gbr|haftungsbeschränkt)\b/g,'').replace(/[^a-z0-9äöüß]/g,'');
 const sameCo=(a,b)=>{const x=normCo(a),y=normCo(b);return !!x&&!!y&&(x===y||x.includes(y)||y.includes(x))};
@@ -1434,7 +1442,7 @@ async function startInvoiceImport(files){
     }catch(e){closeDrawer();toast('ZIP-Datei konnte nicht gelesen werden.');return}
   }
   if(!pdfs.length){closeDrawer();toast('Keine PDF-Rechnungen gefunden.');return}
-  if(pdfs.length===1){invQueue=pdfs;invPos=0;nextInvoice();return}
+  if(pdfs.length===1){invQueue=pdfs;invPos=0;invAutoMode=false;nextInvoice();return}
   await bulkInvoiceImport(pdfs);
 }
 let jsZipReady=null;
@@ -1451,7 +1459,7 @@ const findDup=(p,unitId)=>{const o=parsedOwner(p,unitId);return invoices.find(i=
 // Entscheidet, ob eine Rechnung ohne Rückfrage übernommen werden kann.
 function autoPlan(p){
   if(!(p&&p.number&&p.periodStart&&p.periodEnd&&p.periodEnd>=p.periodStart))return{action:'fail',reason:'nicht lesbar'};
-  const mu=matchUnit(p.location), unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
+  const mu=unitFromLocation(p.location), unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
   if(findDup(p,unitId))return{action:'skip',reason:'schon erfasst'};
   // Rechnungen bis Ende 2025 werden ohne Rückfrage eingepflegt (nur die Wohnung muss erkennbar sein)
   const old=p.periodEnd<'2026-01-01';
@@ -1505,7 +1513,7 @@ async function bulkInvoiceImport(files){
   await loadBookings();
   const row=(x,extra)=>el('span',{class:'row'},el('span',{text:(x.p&&x.p.number?x.p.number+' · ':'')+((x.p&&x.p.customer)||x.file.name)+(x.unitId?' · '+unitName(x.unitId):'')}),el('b',{text:extra||(x.p&&x.p.total!=null?eur2(x.p.total):'')}));
   const block=(title,list,extra)=>list.length?el('details',{open:list===res.review||list===res.fail},el('summary',{style:'cursor:pointer;font-weight:600;padding:4px 0',text:title+' ('+list.length+')'}),el('div',{class:'invlist',style:'margin-top:6px'},list.map(x=>row(x,extra&&extra(x))))):null;
-  const reviewBtn=res.review.length?el('button',{class:'btn primary',onclick:()=>{invQueue=res.review.map(x=>x.file);invPos=0;nextInvoice()}},res.review.length+' jetzt prüfen'):null;
+  const reviewBtn=res.review.length?el('button',{class:'btn primary',onclick:()=>{invQueue=res.review.map(x=>x.file);invPos=0;invAutoMode=true;invAutoCount=0;nextInvoice()}},res.review.length+' jetzt prüfen'):null;
   $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer wide',role:'dialog','aria-modal':'true'},
     el('header',{},el('h2',{text:'Import abgeschlossen'}),el('button',{class:'btn small',onclick:closeDrawer,'aria-label':'Schließen'},'✕')),
     el('div',{class:'body'},
@@ -1519,19 +1527,28 @@ async function bulkInvoiceImport(files){
       block('Neu angelegte Buchungen',res.created),block('Zugeordnet',res.auto),block('Übersprungen',res.skip,()=>'schon erfasst')),
     el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Schließen'),reviewBtn)));
 }
+let invAutoMode=false,invAutoCount=0;
 async function nextInvoice(){
-  if(invPos>=invQueue.length){closeDrawer();invQueue=[];return}
+  if(invPos>=invQueue.length){closeDrawer();invQueue=[];if(invAutoMode&&invAutoCount)toast(invAutoCount+' weitere Rechnung'+(invAutoCount===1?'':'en')+' automatisch übernommen');invAutoMode=false;return}
   const file=invQueue[invPos];
   $('#drawer-root').replaceChildren(el('div',{class:'scrim'}),el('div',{class:'drawer'},el('div',{class:'body'},el('p',{class:'ro-note',text:'Lese '+file.name+' …'}))));
   let p;
   try{p=await readInvoicePdf(file)}catch(e){p=null}
   editing={id:null,invoice:true};
+  // Nach einer Korrektur (z. B. Wohnung gewählt) gleichartige Rechnungen ohne Rückfrage übernehmen
+  if(invAutoMode&&p){const plan=autoPlan(p);
+    try{
+      if(plan.action==='auto'){await saveInvoice(file,p,plan.st);invAutoCount++;invPos++;return nextInvoice()}
+      if(plan.action==='storno'){await saveStorno(file,p,plan.st);invAutoCount++;invPos++;return nextInvoice()}
+      if(plan.action==='skip'){invPos++;return nextInvoice()}
+    }catch(e){}
+  }
   drawInvoiceReview(file,p);
 }
 function drawInvoiceReview(file,p){
   const total=invQueue.length, n=invPos+1;
   const ok=p&&p.number&&p.periodStart;
-  const mu=ok?matchUnit(p.location):null;
+  const mu=ok?unitFromLocation(p.location):null;
   const unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
   const pr=ok?priceFromInvoice(p,unitId):{};
   const st={unitId:unitId||'',company:ok?p.customer:'',target:'',persons:pr.persons??'',price:pr.price??'',priceModel:pr.priceModel||'unit_night',extend:true,start:ok?p.periodStart:''};
