@@ -443,21 +443,35 @@ function monthRevenue(from,to){
 // macht Platz für jemanden, der am 03.11. anreist (Wechseltag).
 const occEnd=b=>{const ld=lastDay(b);if(!ld)return FAR;return ld>b.start?ld:addDays(b.start,1)};
 function overbooked(list){
-  // pro Wohnung: höchste gleichzeitige Belegung und erstes Datum der Überbelegung
+  // Tag für Tag: Wer an einem Tag seine letzte Nacht hat, zählt mit – außer an einem Wechseltag
+  // (am selben Tag reist jemand an und ohne die Abreisenden reichen die Betten).
   const res={};
   for(const u of UNITS){
-    const bs=list.filter(b=>b.unitId===u.id);
-    const ev=[];bs.forEach(b=>{ev.push([b.start,+b.persons||0]);if(occEnd(b)!==FAR)ev.push([occEnd(b),-(+b.persons||0)])});
-    ev.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:a[1]-b[1]);
-    let cur=0,open=null,rp=0;const ranges=[];
-    const inR=(a,e)=>bs.filter(b=>b.start<e&&occEnd(b)>a).map(b=>b.id);
-    for(let i=0;i<ev.length;i++){const[d,v]=ev[i];cur+=v;
-      if(ev[i+1]&&ev[i+1][0]===d)continue; // erst nach allen Ereignissen eines Tages bewerten
-      if(cur>u.cap){if(!open){open=d;rp=cur}else rp=Math.max(rp,cur)}
-      if(cur<=u.cap&&open){ranges.push({from:open,to:d,peak:rp,ids:inR(open,d)});open=null}
-      if(cur>u.cap&&(!res[u.id]||cur>res[u.id].peak)){res[u.id]={peak:cur,from:d,ids:bs.filter(b=>b.start<=d&&occEnd(b)>d).map(b=>b.id)}}}
-    if(open)ranges.push({from:open,to:FAR,peak:rp,ids:inR(open,FAR)});
-    if(res[u.id])res[u.id].ranges=ranges; // Zeiträume der Überbelegung: [from, to)
+    const bs=list.filter(b=>b.unitId===u.id&&(+b.persons||0)>0);
+    if(!bs.length)continue;
+    const startD=bs.map(b=>b.start).sort()[0];
+    const ends=bs.map(b=>endOf(b)).filter(e=>e!==FAR).sort();
+    const horizon=addDays(maxD(TODAY,bs.map(b=>b.start).sort().pop()),365);
+    const endD=bs.some(b=>endOf(b)===FAR)?horizon:minD(ends.pop()||horizon,horizon);
+    const ranges=[];let cur=null;
+    for(let d=startD;d<endD;d=addDays(d,1)){
+      const present=bs.filter(b=>b.start<=d&&endOf(b)>d);
+      const sum=present.reduce((t,b)=>t+(+b.persons||0),0);
+      let over=sum>u.cap;
+      if(over){
+        const leaving=present.filter(b=>lastDay(b)===d), arriving=present.filter(b=>b.start===d);
+        const rest=sum-leaving.reduce((t,b)=>t+(+b.persons||0),0);
+        if(leaving.length&&arriving.length&&rest<=u.cap)over=false; // Wechseltag
+      }
+      if(over){
+        if(!cur){cur={from:d,to:addDays(d,1),peak:sum,ids:new Set()};ranges.push(cur)}
+        cur.to=addDays(d,1);cur.peak=Math.max(cur.peak,sum);present.forEach(b=>cur.ids.add(b.id));
+      }else cur=null;
+    }
+    if(!ranges.length)continue;
+    ranges.forEach(r=>r.ids=[...r.ids]);
+    const top=ranges.reduce((a,r)=>r.peak>a.peak?r:a,ranges[0]);
+    res[u.id]={peak:top.peak,from:ranges[0].from,ids:top.ids,ranges};
   }
   return res;
 }
