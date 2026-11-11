@@ -1250,7 +1250,25 @@ const deDate=s=>{const m=String(s||'').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if
   if(d>last){dateFixes.push({raw:m[0],fixed:pad(last)+'.'+pad(mo)+'.'+y});d=last}
   return y+'-'+pad(mo)+'-'+pad(d)};
 
+// Rabatt (z. B. „Rabatt 50.00%“ unter der Zwischensumme): Zervant zeigt Menge × Listenpreis,
+// berechnet wird aber weniger. Einzelpreise und Positionen werden auf den tatsächlich berechneten Betrag umgerechnet.
 function parseInvoice(items,width){
+  const p=parseInvoiceRaw(items,width);
+  if(!p||!/rabatt/i.test(p.raw||''))return p;
+  const pos=(p.positions||[]).filter(x=>x.quantity!=null&&x.unitPrice!=null);
+  const list=pos.length?pos.reduce((s,x)=>s+x.quantity*x.unitPrice,0):(p.quantity!=null&&p.unitPrice!=null?p.quantity*p.unitPrice:null);
+  if(list==null||p.net==null||!(list>p.net+0.5))return p;
+  const f=p.net/list, r=n=>Math.round(n*100)/100;
+  const m=(p.raw||'').match(/Rabatt[^\n]*?(\d+(?:[.,]\d+)?)\s*%/i);
+  p.discountPct=m?+m[1].replace(',','.'):Math.round((1-f)*10000)/100;
+  p.listUnitPrice=p.unitPrice;
+  if(p.unitPrice!=null)p.unitPrice=r(p.unitPrice*f);
+  if(p.ppn!=null)p.ppn=r(p.ppn*f);
+  (p.groups||[]).forEach(g=>{if(g.ppn!=null)g.ppn=r(g.ppn*f)});
+  (p.positions||[]).forEach(x=>{if(x.unitPrice!=null)x.unitPrice=r(x.unitPrice*f);if(x.amount!=null)x.amount=r(x.amount*f)});
+  return p;
+}
+function parseInvoiceRaw(items,width){
   const rows=invoiceLines(items);
   const all=rows.map(r=>r.text).join('\n');
   const out={raw:all,number:'',date:'',due:'',customer:'',customerAddr:[],periodStart:'',periodEnd:'',location:'',quantity:null,unitPrice:null,vatRate:null,net:null,vat:null,total:null,description:''};
@@ -1524,6 +1542,7 @@ function drawInvoiceReview(file,p){
       ...((p.groups||[]).length>1||(p.groups||[]).some(g=>g.persons)?[el('dt',{text:'Zeiträume'}),el('dd',{},...(p.groups||[]).map(g=>el('div',{class:'num',text:fmt(g.start)+' – '+fmt(g.end)+(g.persons?' · '+g.persons+' Pers.':'')+(g.ppn!=null?' à '+eur2(g.ppn)+'/Nacht':'')})))]:[]),
       el('dt',{text:(p.positions||[]).length>1?'Positionen':'Position'}),el('dd',{},...((p.positions||[]).length?p.positions:[{quantity:p.quantity,unitPrice:p.unitPrice,description:p.description}]).map(x=>el('div',{class:'num',text:(x.quantity!=null?String(x.quantity).replace('.',','):'?')+' × '+(x.unitPrice!=null?eur2(x.unitPrice):'?')+' netto'+(x.description?' ('+x.description+')':'')}))),
       ...(p.invPersons?[el('dt',{text:'Personen'}),el('dd',{text:p.invPersons+' am '+fmt(p.periodEnd)+((p.groups||[]).length>1?' (zusammen)':'')})]:[]),
+      ...(p.discountPct?[el('dt',{text:'Rabatt'}),el('dd',{text:String(p.discountPct).replace('.',',')+' % – Preise unten sind die tatsächlich berechneten (Listenpreis '+eur2(p.listUnitPrice)+')'})]:[]),
       el('dt',{text:'Netto / USt.'}),el('dd',{class:'num',text:(p.net!=null?eur2(p.net):'—')+' / '+(p.vat!=null?eur2(p.vat):'—')+(p.vatRate!=null?' ('+p.vatRate+' %)':'')})));
 
   const unitSel=el('select',{id:'iv-unit'},el('option',{value:'',text:'Bitte wählen …'}),allowedBuildings().map(bld=>el('optgroup',{label:bld.name},bld.units.map(([uid,label,cap])=>el('option',{value:uid,text:label+' ('+cap+' Betten)'})))));
