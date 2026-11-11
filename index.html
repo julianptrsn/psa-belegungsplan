@@ -376,8 +376,8 @@ body{background:
 
 <div class="auth" id="auth" hidden>
   <form class="auth-card" id="auth-form" novalidate>
-    <svg width="40" height="40" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="var(--accent)"/><path d="M10 18 17 12l7 6M12 17v7h10v-7" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="15.5" y="19" width="3" height="3" rx=".6" fill="var(--today)"/></svg>
-    <div><h1 id="auth-title">Belegungsplan</h1><p id="auth-sub">Monteur Apartments Flensburg · bitte anmelden</p></div>
+    <svg viewBox="0 0 64 64" aria-hidden="true" width="52" height="52" style="border-radius:14px;box-shadow:0 0 0 1px rgba(255,255,255,.18)"><rect width="64" height="64" rx="15" fill="#163A43"/><path d="M21 38 L32 28 L43 38" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.5 37 V47 H39.5 V37" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="29.5" y="39.5" width="5" height="5" rx="1" fill="#E7A33E"/><path d="M18 52 q3.6 -3.2 7.2 0 t7.2 0 t7.2 0 t7.2 0" fill="none" stroke="#6FA0B0" stroke-width="2.2" stroke-linecap="round"/><g transform="translate(23.8,16) scale(0.9)" fill="#F5F1EA"><ellipse cx="9.5" cy="7.3" rx="4.9" ry="2.8"/><circle cx="4.9" cy="5.2" r="2"/><path d="M3.1 5 L0.5 5.9 L3.3 6.6 Z"/><path d="M13.4 6.4 L17.8 5.1 L14 8.3 Z"/><rect x="7.1" y="9.5" width="0.85" height="3.4" rx=".3"/><rect x="9.5" y="9.5" width="0.85" height="3.4" rx=".3"/></g></svg>
+    <div><h1 id="auth-title">Belegungsplan</h1><p id="auth-sub">Monteur Apartments Flensburg · Verwaltung</p></div>
     <div class="auth-msg" id="auth-msg" hidden></div>
     <div class="field" id="auth-email-f"><label for="auth-email">E-Mail</label><input id="auth-email" type="email" autocomplete="username" required></div>
     <div class="field" id="auth-pw-f"><label for="auth-pw">Passwort</label><input id="auth-pw" type="password" autocomplete="current-password" required></div>
@@ -1714,7 +1714,7 @@ function showAuth(mode){
   $('#app').hidden=true;$('#auth').hidden=false;
   const setpw=authMode==='setpw', forgot=authMode==='forgot';
   $('#auth-title').textContent=setpw?'Passwort festlegen':forgot?'Passwort zurücksetzen':'Belegungsplan';
-  $('#auth-sub').textContent=setpw?'Wähle ein Passwort mit mindestens 8 Zeichen.':forgot?'Wir schicken dir einen Link per E-Mail.':'Monteur Apartments Flensburg · bitte anmelden';
+  $('#auth-sub').textContent=setpw?'Wähle ein Passwort mit mindestens 8 Zeichen.':forgot?'Wir schicken dir einen Link per E-Mail.':'Monteur Apartments Flensburg · Verwaltung';
   $('#auth-email-f').hidden=setpw;
   $('#auth-pw-f').hidden=forgot;
   $('#auth-pw').autocomplete=setpw?'new-password':'current-password';
