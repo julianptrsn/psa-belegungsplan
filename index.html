@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<meta name="theme-color" content="#1d5f6e">
+<meta name="theme-color" content="#0B2329">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Belegung">
@@ -17,33 +17,26 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: Kopfzeile mit Kennzahlen, darunter drei Ansichten (Übersicht · Belegungsplan · Buchungen); Bearbeiten im Seitenpanel */
+/* Layout: feste Seitenleiste links, Inhalt rechts; alles schwebt als „Liquid Glass“ über einem
+   Petrol-Hintergrund mit groß und unscharf gesetztem Logo. Ein bewusst einziges, dunkles Erscheinungsbild. */
 :root{
-  --bg:#f3f5f5; --surface:#ffffff; --sunk:#e8eded; --line:#d5dddd; --line-soft:#e4eaea;
-  --fg:#13282d; --muted:#5b7076; --faint:#8a9ca0;
-  --accent:#1d5f6e; --accent-fg:#ffffff; --accent-soft:#d9eaed;
-  --bar:#2c7586; --bar-fg:#ffffff; --bar-res:#e3eef0;
-  --ok:#2f7a4c; --ok-soft:#dcefe2;
-  --warn:#b26b0b; --warn-soft:#f8e8cf;
-  --bad:#b4302a; --bad-soft:#f6dcda;
-  --weekend:#eef2f2; --today:#d7891c;
+  --petrol:#163A43; --petrol-deep:#0B2329; --gold:#E7A33E; --sea:#6FA0B0; --sand:#F5F1EA;
+  --bg:#0B2329;
+  --glass:rgba(255,255,255,.075); --glass-hi:rgba(255,255,255,.12); --glass-line:rgba(255,255,255,.14);
+  --surface:rgba(255,255,255,.075); --sunk:rgba(255,255,255,.05); --line:rgba(255,255,255,.13); --line-soft:rgba(255,255,255,.07);
+  --solid:#10303A; --solid-2:#0E2A32;
+  --fg:#EEF4F4; --muted:#A3BCC1; --faint:#6F8D93;
+  --accent:#7CCFD9; --accent-fg:#06222A; --accent-soft:rgba(124,207,217,.16);
+  --bar:#2E8C99; --bar-fg:#ffffff; --bar-res:rgba(124,207,217,.14);
+  --ok:#6BD69E; --ok-soft:rgba(107,214,158,.16);
+  --warn:#F2B552; --warn-soft:rgba(242,181,82,.16);
+  --bad:#FF8279; --bad-soft:rgba(255,130,121,.16);
+  --weekend:rgba(255,255,255,.035); --today:#E7A33E;
   --font-ui:'Archivo',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
   --font-num:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
-  --r:8px;
+  --r:10px; --side:252px;
+  color-scheme:dark;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0f1b1e; --surface:#16262a; --sunk:#1c2f34; --line:#2a4148; --line-soft:#213740;
-  --fg:#e3ecee; --muted:#9db1b6; --faint:#6e868c;
-  --accent:#6fb8c8; --accent-fg:#0d1a1d; --accent-soft:#1f3d45;
-  --bar:#3f8fa1; --bar-fg:#ffffff; --bar-res:#1f3a41;
-  --ok:#6cc48d; --ok-soft:#1d3a2a; --warn:#e7a54a; --warn-soft:#3b2e18; --bad:#ef7b74; --bad-soft:#42211f;
-  --weekend:#132327; --today:#e7a54a; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0f1b1e; --surface:#16262a; --sunk:#1c2f34; --line:#2a4148; --line-soft:#213740;
-  --fg:#e3ecee; --muted:#9db1b6; --faint:#6e868c;
-  --accent:#6fb8c8; --accent-fg:#0d1a1d; --accent-soft:#1f3d45;
-  --bar:#3f8fa1; --bar-fg:#ffffff; --bar-res:#1f3a41;
-  --ok:#6cc48d; --ok-soft:#1d3a2a; --warn:#e7a54a; --warn-soft:#3b2e18; --bad:#ef7b74; --bad-soft:#42211f;
-  --weekend:#132327; --today:#e7a54a; color-scheme:dark}
 
 *{box-sizing:border-box}
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -275,6 +268,104 @@ td .s{font-size:12px;color:var(--muted)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,calc(env(safe-area-inset-bottom,0px) + 12px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:30}
 .ro-note{font-size:13px;color:var(--muted)}
 @media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+
+/* ===================== Liquid-Glass-Design ===================== */
+html{background:var(--petrol-deep)}
+body{background:
+  radial-gradient(1200px 700px at 85% -10%,rgba(111,160,176,.28),transparent 60%),
+  radial-gradient(900px 600px at -10% 110%,rgba(231,163,62,.14),transparent 60%),
+  linear-gradient(160deg,#163A43 0%,#0E2C34 45%,#0A1F25 100%) fixed;color:var(--fg);min-height:100vh}
+.bgart{position:fixed;z-index:0;pointer-events:none;width:min(110vmin,1050px);aspect-ratio:1;right:-8vmin;top:50%;transform:translateY(-50%);filter:blur(10px) saturate(120%);opacity:.32}
+.bgart svg{width:100%;height:100%}
+#app,#auth{position:relative;z-index:1}
+/* Glas */
+.panel,.kpi,.tl-headwrap,.tl-scroll,.tbl-wrap,.side,.auth-card,.notice,.mtop,.tl-bar,.stats-head .seg,.filters .seg{
+  background:var(--glass);border:1px solid var(--glass-line);
+  -webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 12px 32px rgba(0,0,0,.22)}
+.panel,.kpi,.tbl-wrap,.notice{border-radius:18px}
+.panel header{border-bottom-color:var(--line-soft)}
+/* Seitenleiste */
+.side{position:fixed;z-index:20;left:max(14px,env(safe-area-inset-left,0px));top:calc(14px + env(safe-area-inset-top,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));width:var(--side);border-radius:22px;display:flex;flex-direction:column;gap:6px;padding:18px 14px;overflow-y:auto}
+.side-brand{display:flex;align-items:center;gap:12px;padding:2px 6px 16px}
+.mk{display:inline-flex;flex:none}
+.side-brand .mk svg{width:42px;height:42px;border-radius:12px;box-shadow:0 0 0 1px rgba(255,255,255,.18),0 6px 18px rgba(0,0,0,.3)}
+.side-brand b{display:block;font-size:15px;font-weight:750;font-stretch:108%;letter-spacing:-.01em}
+.side-brand small{display:block;font-size:12px;color:var(--muted)}
+.side-lbl{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:14px 10px 6px}
+.side-nav,.side-act{display:grid;gap:4px}
+.nav-item{display:flex;align-items:center;gap:12px;width:100%;border:1px solid transparent;background:transparent;color:var(--muted);padding:10px 12px;border-radius:12px;font-weight:600;font-size:14px;cursor:pointer;text-align:left}
+.nav-item svg{width:19px;height:19px;flex:none}
+.nav-item:hover{background:rgba(255,255,255,.06);color:var(--fg)}
+.nav-item[aria-selected="true"]{background:var(--glass-hi);border-color:var(--glass-line);color:var(--fg);box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}
+.nav-item[aria-selected="true"] svg{color:var(--gold)}
+.side-act .btn.primary{width:100%;justify-content:flex-start;gap:12px;padding:11px 12px;border-radius:12px;margin-bottom:4px}
+.side-act .btn.primary svg{width:19px;height:19px}
+.side .owner-sel{margin:0 4px;width:calc(100% - 8px);background:rgba(255,255,255,.06);border:1px solid var(--glass-line);color:var(--fg);border-radius:12px;padding:9px 10px}
+.side .owner-sel option{background:var(--solid);color:var(--fg)}
+.side-foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px 6px 2px;border-top:1px solid var(--line-soft)}
+.avatar{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-weight:750;background:linear-gradient(135deg,var(--gold),#C9822A);color:#2A1A05;flex:none}
+.who{flex:1;min-width:0}.who b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.who small{font-size:11px;color:var(--faint)}
+.iconbtn{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;border:1px solid var(--glass-line);background:rgba(255,255,255,.06);color:var(--fg);cursor:pointer;flex:none}
+.iconbtn svg{width:19px;height:19px}.iconbtn:hover{background:rgba(255,255,255,.12)}
+.iconbtn.gold{background:var(--gold);border-color:transparent;color:#2A1A05}
+/* Inhalt rechts neben der Leiste */
+#app>main.wrap{max-width:1320px;margin:0 0 0 calc(var(--side) + 28px);padding-top:18px}
+.mtop,.side-scrim{display:none}
+/* Kennzahlen als einzelne Glas-Kacheln */
+.kpis{background:none;border:0;border-radius:0;gap:14px;overflow:visible;margin-top:0}
+.kpi{padding:18px 18px 16px;position:relative}
+.kpi .lbl{font-size:11px;letter-spacing:.1em}
+.kpi .val{font-size:30px;margin-top:8px}
+/* Knöpfe & Felder */
+.btn{background:rgba(255,255,255,.07);border-color:var(--glass-line);color:var(--fg);border-radius:11px}
+.btn:hover{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.22)}
+.btn.primary{background:linear-gradient(180deg,#F0B457,var(--gold));border-color:transparent;color:#2A1A05;box-shadow:0 6px 18px rgba(231,163,62,.28)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.danger{color:var(--bad);border-color:rgba(255,130,121,.35)}
+.field input,.field select,.field textarea,.search{background:rgba(255,255,255,.06);border-color:var(--glass-line);color:var(--fg);border-radius:10px}
+.field select option{background:var(--solid);color:var(--fg)}
+.seg{background:var(--glass);border-radius:12px}
+.seg button[aria-pressed="true"]{background:var(--glass-hi);color:var(--fg);box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}
+.rows li:hover,tbody tr:hover{background:rgba(255,255,255,.05)}
+.chip{background:rgba(255,255,255,.05);border-color:var(--glass-line);color:var(--fg);border-radius:10px}
+.calc{background:rgba(255,255,255,.05);border-radius:12px}
+.pill.info{background:var(--accent-soft);color:var(--accent)}
+.pill.neutral{background:rgba(255,255,255,.08);color:var(--muted)}
+/* Belegungsplan */
+.tl-bar{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--mtop,0px));border-radius:16px;padding:10px 12px;margin-bottom:8px}
+.tl-headwrap{top:calc(env(safe-area-inset-top,0px) + var(--mtop,0px) + var(--barh,52px) + 8px);border-radius:16px 16px 0 0}
+.tl-scroll{border-radius:0 0 16px 16px;border-top:0}
+.tl-head,.tl-head .tl-lab{background:var(--solid)}
+.tl-lab,.tl-row .tl-lab{background:var(--solid-2)}
+.tl-group,.tl-group .tl-lab{background:#12333C}
+.tl-group .fill{background:transparent}
+.bar{box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.bar.res{background:var(--bar-res);color:var(--fg)}
+/* Seitliches Fenster (Buchung, Rechnung, Abreise) */
+.drawer{background:rgba(12,38,45,.82);-webkit-backdrop-filter:blur(26px) saturate(150%);backdrop-filter:blur(26px) saturate(150%);border-left:1px solid var(--glass-line);box-shadow:-20px 0 50px rgba(0,0,0,.35)}
+.scrim{background:rgba(3,14,17,.45);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.invsum{border-color:var(--glass-line);border-radius:14px}.invsum .h{background:rgba(255,255,255,.06)}
+.toast{background:var(--sand);color:#10252B}
+.chart-tip{background:var(--sand);color:#10252B}
+/* Login */
+.auth-card{border-radius:22px;background:rgba(255,255,255,.09)}
+/* Statistik */
+.vchart .bar2{background:linear-gradient(180deg,#9BE0E8,var(--accent))}
+.hbar .tr i{background:linear-gradient(90deg,var(--accent),#9BE0E8)}
+/* Handy & Tablet: Leiste als ausfahrbares Menü, oben eine schmale Kopfleiste */
+@media (max-width:980px){
+  .mtop{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:15;margin:0;border-radius:0;border-width:0 0 1px;padding:10px max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px));padding-top:max(10px,env(safe-area-inset-top,0px))}
+  .mtop-brand{flex:1;display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;min-width:0}
+  .mtop-brand .mk svg{width:32px;height:32px;border-radius:9px}
+  .side{transform:translateX(calc(-100% - 30px));transition:transform .22s ease}
+  body.nav-open .side{transform:none}
+  .side-scrim{position:fixed;inset:0;z-index:19;background:rgba(3,14,17,.5)}
+  body.nav-open .side-scrim{display:block}
+  #app>main.wrap{margin:0 auto;padding-top:14px}
+  .bgart{right:-30vmin;width:150vmin;opacity:.42}
+}
+@media (prefers-reduced-motion:reduce){.side{transition:none}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 </head>
@@ -293,25 +384,35 @@ td .s{font-size:12px;color:var(--muted)}
 </div>
 
 <div id="app" hidden>
-<header class="top">
-  <div class="wrap">
-    <div class="brand">
-      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="var(--accent)"/><path d="M10 18 17 12l7 6M12 17v7h10v-7" fill="none" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="15.5" y="19" width="3" height="3" rx=".6" fill="var(--today)"/></svg>
-      <div><h1>Belegungsplan</h1><small>Monteur Apartments Flensburg · PSA Immobilien</small></div>
-    </div>
-    <select id="owner-sel" class="owner-sel" aria-label="Eigentümer"><option value="all">Alle Wohnungen</option><option>PSA Immobilien</option><option>Torben Schmidt</option></select>
-    <div class="tabs" role="tablist">
-      <button role="tab" id="tab-ov" data-view="ov" aria-selected="true">Übersicht</button>
-      <button role="tab" id="tab-tl" data-view="tl" aria-selected="false">Belegungsplan</button>
-      <button role="tab" id="tab-ls" data-view="ls" aria-selected="false">Buchungen</button>
-    </div>
-    <button class="btn" id="btn-dep" hidden title="Bestätigte Abreise für eine Buchung eintragen">Abreise</button>
-    <button class="btn" id="btn-inv" hidden title="Eine oder mehrere Rechnungen als PDF hochladen">Rechnung hochladen</button>
-    <input type="file" id="inv-file" accept="application/pdf,.pdf" multiple hidden>
-    <button class="btn primary" id="btn-new" hidden>+ Buchung</button>
-    <div class="userbox"><span id="user-name"></span><button class="btn small" id="btn-logout">Abmelden</button></div>
-  </div>
+<div class="bgart" aria-hidden="true"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M21 38 L32 28 L43 38" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.5 37 V47 H39.5 V37" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="29.5" y="39.5" width="5" height="5" rx="1" fill="#E7A33E"/><path d="M18 52 q3.6 -3.2 7.2 0 t7.2 0 t7.2 0 t7.2 0" fill="none" stroke="#6FA0B0" stroke-width="2.2" stroke-linecap="round"/><g transform="translate(23.8,16) scale(0.9)" fill="#F5F1EA"><ellipse cx="9.5" cy="7.3" rx="4.9" ry="2.8"/><circle cx="4.9" cy="5.2" r="2"/><path d="M3.1 5 L0.5 5.9 L3.3 6.6 Z"/><path d="M13.4 6.4 L17.8 5.1 L14 8.3 Z"/><rect x="7.1" y="9.5" width="0.85" height="3.4" rx=".3"/><rect x="9.5" y="9.5" width="0.85" height="3.4" rx=".3"/></g></svg></div>
+<header class="mtop">
+  <button class="iconbtn" id="btn-menu" aria-label="Menü öffnen" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <div class="mtop-brand"><span class="mk"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#163A43"/><path d="M21 38 L32 28 L43 38" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.5 37 V47 H39.5 V37" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="29.5" y="39.5" width="5" height="5" rx="1" fill="#E7A33E"/><path d="M18 52 q3.6 -3.2 7.2 0 t7.2 0 t7.2 0 t7.2 0" fill="none" stroke="#6FA0B0" stroke-width="2.2" stroke-linecap="round"/><g transform="translate(23.8,16) scale(0.9)" fill="#F5F1EA"><ellipse cx="9.5" cy="7.3" rx="4.9" ry="2.8"/><circle cx="4.9" cy="5.2" r="2"/><path d="M3.1 5 L0.5 5.9 L3.3 6.6 Z"/><path d="M13.4 6.4 L17.8 5.1 L14 8.3 Z"/><rect x="7.1" y="9.5" width="0.85" height="3.4" rx=".3"/><rect x="9.5" y="9.5" width="0.85" height="3.4" rx=".3"/></g></svg></span><span id="page-title">Übersicht</span></div>
+  <button class="iconbtn gold" id="btn-new-m" aria-label="Neue Buchung" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
 </header>
+<aside class="side" id="side">
+  <div class="side-brand"><span class="mk"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#163A43"/><path d="M21 38 L32 28 L43 38" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.5 37 V47 H39.5 V37" fill="none" stroke="#F5F1EA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="29.5" y="39.5" width="5" height="5" rx="1" fill="#E7A33E"/><path d="M18 52 q3.6 -3.2 7.2 0 t7.2 0 t7.2 0 t7.2 0" fill="none" stroke="#6FA0B0" stroke-width="2.2" stroke-linecap="round"/><g transform="translate(23.8,16) scale(0.9)" fill="#F5F1EA"><ellipse cx="9.5" cy="7.3" rx="4.9" ry="2.8"/><circle cx="4.9" cy="5.2" r="2"/><path d="M3.1 5 L0.5 5.9 L3.3 6.6 Z"/><path d="M13.4 6.4 L17.8 5.1 L14 8.3 Z"/><rect x="7.1" y="9.5" width="0.85" height="3.4" rx=".3"/><rect x="9.5" y="9.5" width="0.85" height="3.4" rx=".3"/></g></svg></span><div><b>Monteur Apartments</b><small>Verwaltung · PSA Immobilien</small></div></div>
+  <div class="side-lbl">Menü</div>
+  <nav class="side-nav" role="tablist" aria-label="Ansichten">
+    <button class="nav-item" role="tab" id="tab-ov" data-view="ov" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z"/></svg><span>Übersicht</span></button>
+    <button class="nav-item" role="tab" id="tab-tl" data-view="tl" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18M3 12h18M3 19h18M7 3v4M12 10v4M16 17v4"/></svg><span>Belegungsplan</span></button>
+    <button class="nav-item" role="tab" id="tab-ls" data-view="ls" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg><span>Buchungen</span></button>
+  </nav>
+  <div class="side-lbl" id="side-act-lbl" hidden>Aktionen</div>
+  <div class="side-act">
+    <button class="btn primary" id="btn-new" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>Neue Buchung</span></button>
+    <button class="nav-item" id="btn-dep" hidden title="Bestätigte Abreise für eine Buchung eintragen"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6v18h8M10 12h11M17 8l4 4-4 4"/></svg><span>Abreise eintragen</span></button>
+    <button class="nav-item" id="btn-inv" hidden title="Eine oder mehrere Rechnungen als PDF hochladen"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/></svg><span>Rechnung hochladen</span></button>
+    <input type="file" id="inv-file" accept="application/pdf,.pdf" multiple hidden>
+  </div>
+  <div class="side-lbl">Wohnungen</div>
+  <select id="owner-sel" class="owner-sel" aria-label="Eigentümer"><option value="all">Alle Wohnungen</option><option>PSA Immobilien</option><option>Torben Schmidt</option></select>
+  <div class="side-foot">
+    <span class="avatar" id="user-ini">·</span><div class="who"><b id="user-name"></b><small>angemeldet</small></div>
+    <button class="iconbtn" id="btn-logout" aria-label="Abmelden" title="Abmelden"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H4V3h5M16 17l5-5-5-5M21 12H9"/></svg></button>
+  </div>
+</aside>
+<div class="side-scrim" id="side-scrim"></div>
 
 <main class="wrap">
   <div class="kpis" id="kpis"></div>
@@ -562,7 +663,9 @@ const unitName=id=>{const u=UNIT[id];return u?(u.label==='Wohnung'?u.addr:u.addr
 
 /* ===== Rendering ===== */
 function render(){
-  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.view===view));
+  document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.setAttribute('aria-selected',b.dataset.view===view));
+  $('#page-title').textContent={ov:'Übersicht',tl:'Belegungsplan',ls:'Buchungen'}[view];
+  $('#btn-new-m').hidden=!canWrite;$('#side-act-lbl').hidden=!canWrite;
   ['ov','tl','ls'].forEach(v=>$('#view-'+v).hidden=v!==view);
   $('#btn-new').hidden=!canWrite;
   $('#btn-inv').hidden=!canWrite;
@@ -1015,7 +1118,10 @@ function exportCsv(){
 function syncHead(){
   const sc=$('#tl-scroll'),hw=$('#tl-headwrap');if(!sc||!hw)return;
   hw.scrollLeft=sc.scrollLeft;
-  const bar=document.querySelector('.tl-bar');if(bar)document.documentElement.style.setProperty('--barh',bar.offsetHeight+'px');
+  const bar=document.querySelector('.tl-bar'),mt=document.querySelector('.mtop');
+  const mh=mt&&getComputedStyle(mt).display!=='none'?mt.offsetHeight:0;
+  document.documentElement.style.setProperty('--mtop',mh+'px');
+  if(bar)document.documentElement.style.setProperty('--barh',bar.offsetHeight+'px');
 }
 $('#tl-scroll').addEventListener('scroll',()=>{$('#tl-headwrap').scrollLeft=$('#tl-scroll').scrollLeft},{passive:true});
 window.addEventListener('resize',syncHead);
@@ -1032,7 +1138,12 @@ function applyOwnerSelect(){
 applyOwnerSelect();
 $('#owner-sel').addEventListener('change',e=>{ownerSel=e.target.value;try{localStorage.setItem('mafl-owner',ownerSel)}catch(_){}render()});
 function save(){try{localStorage.setItem('mafl-view',view)}catch(e){}}
-document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;save();render()}));
+document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;save();setNav(false);render();scrollTo(0,0)}));
+function setNav(open){document.body.classList.toggle('nav-open',open);$('#btn-menu').setAttribute('aria-expanded',open)}
+$('#btn-menu').addEventListener('click',()=>setNav(!document.body.classList.contains('nav-open')));
+$('#side-scrim').addEventListener('click',()=>setNav(false));
+['#btn-dep','#btn-inv','#btn-new'].forEach(id=>$(id).addEventListener('click',()=>setNav(false)));
+$('#btn-new-m').addEventListener('click',()=>$('#btn-new').click());
 $('#btn-new').addEventListener('click',()=>openDrawer(null,view==='tl'?{start:tlMonth===TODAY.slice(0,7)?TODAY:tlMonth+'-01'}:null));
 $('#tl-prev').addEventListener('click',()=>{tlMonth=addMonths(tlMonth+'-01',-1).slice(0,7);renderTimeline()});
 $('#tl-next').addEventListener('click',()=>{tlMonth=addMonths(tlMonth+'-01',1).slice(0,7);renderTimeline()});
@@ -1654,6 +1765,7 @@ async function startApp(session){
   myOwners=Array.isArray(me?.owners)?OWNERS.filter(o=>me.owners.includes(o)):OWNERS.slice();
   applyOwnerSelect();
   $('#user-name').textContent=me?.name||session.user.email;
+  $('#user-ini').textContent=((me?.name||session.user.email||'?').trim()[0]||'?').toUpperCase();
   render();
   await loadBookings();
   if(channel)sb.removeChannel(channel);
