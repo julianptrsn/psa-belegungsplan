@@ -272,6 +272,10 @@ td .s{font-size:12px;color:var(--muted)}
 .ro-note{font-size:13px;color:var(--muted)}
 /* Rechnungsstellung */
 .filters .grow{flex:1}
+.rg-dates{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rg-dates select,.rg-dates input{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:13px}
+.rg-sum{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted);margin:0 0 10px}
+.rg-sum b{color:var(--fg)}
 a.btn{text-decoration:none;color:inherit}
 .drawer.wide{width:min(720px,100%)}
 .lines{display:grid;gap:8px}
@@ -529,6 +533,10 @@ body{background:
         <button data-f="all" aria-pressed="false">Alle</button>
       </div>
       <input class="search" id="rg-q" type="search" placeholder="Kunde, Nummer oder Wohnung">
+      <div class="rg-dates" id="rg-dates">
+        <select id="rg-range" aria-label="Zeitraum"><option value="all">Alle Daten</option><option value="m0">Dieser Monat</option><option value="m1">Letzter Monat</option><option value="y0">Dieses Jahr</option><option value="y1">Letztes Jahr</option><option value="r12">Letzte 12 Monate</option><option value="custom">Eigener Zeitraum</option></select>
+        <input type="date" id="rg-from" aria-label="Rechnungsdatum von"><span class="s">–</span><input type="date" id="rg-to" aria-label="Rechnungsdatum bis">
+      </div>
       <span class="grow"></span>
       <button class="btn small" id="btn-bset" hidden>Einstellungen</button>
       <button class="btn small" id="btn-cusimp" hidden>Kunden aus Zervant</button>
@@ -1987,7 +1995,7 @@ document.addEventListener('drop',e=>{if(!hasFiles(e))return;e.preventDefault();d
 // Rechnungen aus dem Tool bekommen ihre Nummer in der Datenbank (create_invoice) und sind danach unveränderlich.
 // Korrekturen laufen ausschließlich über Stornorechnungen.
 let customers=[], issuers={}, bset=null, billingReady=false;
-let rgMode='inv', rgFilter='open', rgQuery='';
+let rgMode='inv', rgFilter='open', rgQuery='', rgFrom='', rgTo='';
 const r2=n=>Math.round((+n+Number.EPSILON)*100)/100;
 const fmtL=s=>s?s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4):'';
 const num2=n=>(+n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2035,7 +2043,7 @@ function renderOverdue(){
 function renderBilling(){
   document.querySelectorAll('#rg-mode button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===rgMode));
   document.querySelectorAll('#rg-seg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.f===rgFilter));
-  $('#rg-seg').hidden=rgMode!=='inv';
+  $('#rg-seg').hidden=rgMode!=='inv';$('#rg-dates').hidden=rgMode!=='inv';
   $('#btn-rnew').hidden=!canWrite||!billingReady;$('#btn-cus').hidden=!canWrite||!billingReady;$('#btn-bset').hidden=!canWrite||!billingReady;$('#btn-cusimp').hidden=!canWrite||!billingReady||rgMode!=='cus';
   $('#rg-q').placeholder=rgMode==='inv'?'Kunde, Nummer oder Wohnung':'Firma, Name, E-Mail oder Ort';
   const note=$('#rg-note');note.replaceChildren();
@@ -2064,7 +2072,7 @@ function renderBilling(){
     }));
     return;
   }
-  head.replaceChildren(el('tr',{},el('th',{text:'Nr.'}),el('th',{text:'Datum'}),el('th',{text:'Kunde'}),el('th',{text:'Wohnung · Zeitraum'}),el('th',{class:'r',text:'Brutto'}),el('th',{text:'Status'})));
+  head.replaceChildren(el('tr',{},el('th',{text:'Nr.'}),el('th',{text:'Datum'}),el('th',{text:'Kunde'}),el('th',{text:'Wohnung · Zeitraum'}),el('th',{class:'r',text:'Brutto'}),el('th',{text:'Status'}),el('th',{text:''})));
   let list=invoices.filter(invInScope);
   list=list.filter(i=>{const k=invStatus(i).key;
     if(rgFilter==='open')return k==='open'||k==='overdue';
@@ -2072,8 +2080,14 @@ function renderBilling(){
     if(rgFilter==='paid')return k==='paid';
     return true});
   if(q)list=list.filter(i=>[i.number,i.customer,unitName(i.unit_id)].join(' ').toLowerCase().includes(q));
+  if(rgFrom)list=list.filter(i=>(i.invoice_date||'')>=rgFrom);
+  if(rgTo)list=list.filter(i=>(i.invoice_date||'')<=rgTo&&!!i.invoice_date);
   list.sort((a,c)=>(a.invoice_date||'')<(c.invoice_date||'')?1:(a.invoice_date||'')>(c.invoice_date||'')?-1:(a.number<c.number?1:-1));
-  if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'6',class:'empty',text:rgFilter==='open'?'Keine offenen Rechnungen aus dem Tool.':'Keine Rechnungen für diesen Filter.'})));return}
+  // Summe der angezeigten Rechnungen (Stornos negativ) – z. B. zum Abgleich mit Zervant
+  const sumNet=list.reduce((t,i)=>t+invNet(i),0),sumGross=list.reduce((t,i)=>t+(+i.total||0),0);
+  note.append(el('div',{class:'rg-sum'},el('span',{text:list.length+' Rechnung'+(list.length===1?'':'en')+(rgFrom||rgTo?' vom '+(rgFrom?fmt(rgFrom):'Anfang')+' bis '+(rgTo?fmt(rgTo):'heute'):'')}),
+    el('span',{},'netto ',el('b',{class:'num',text:eur2(sumNet)})),el('span',{},'brutto ',el('b',{class:'num',text:eur2(sumGross)}))));
+  if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'7',class:'empty',text:rgFilter==='open'?'Keine offenen Rechnungen aus dem Tool.':'Keine Rechnungen für diesen Filter.'})));return}
   body.replaceChildren(...list.map(i=>{const st=invStatus(i);
     return el('tr',{onclick:()=>openInvoiceDetail(i.id)},
       el('td',{class:'num'},el('div',{text:i.number}),i.source==='tool'?null:el('div',{class:'s',text:'Import'})),
@@ -2081,9 +2095,27 @@ function renderBilling(){
       el('td',{text:i.customer||'—'}),
       el('td',{},el('div',{text:i.unit_id?unitName(i.unit_id):'—'}),el('div',{class:'s num',text:fmt(i.period_start)+' – '+fmt(i.period_end)})),
       el('td',{class:'r num',text:i.total!=null?eur2(+i.total):'—'}),
-      el('td',{},el('span',{class:'pill '+st.cls,text:st.label})));
+      el('td',{},el('span',{class:'pill '+st.cls,text:st.label})),
+      el('td',{class:'r'},i.file_path?el('button',{class:'btn small',title:'Rechnung als PDF anzeigen',onclick:e=>{e.stopPropagation();showInvoicePdf(i)}},'PDF'):null));
   }));
 }
+// PDF direkt aus der Liste öffnen (Fenster sofort öffnen, damit der Browser es nicht blockiert)
+async function showInvoicePdf(i){
+  const w=window.open('','_blank');
+  const {data,error}=await sb.storage.from('rechnungen').createSignedUrl(i.file_path,3600);
+  if(error||!data?.signedUrl){if(w)w.close();toast('PDF konnte nicht geladen werden.');return}
+  if(w)w.location=data.signedUrl;else location.href=data.signedUrl;
+}
+function rgSetRange(v){
+  const y=+TODAY.slice(0,4),m=TODAY.slice(0,7)+'-01';
+  const r={all:['',''],m0:[m,TODAY],m1:[addMonths(m,-1),addDays(m,-1)],y0:[y+'-01-01',TODAY],y1:[(y-1)+'-01-01',(y-1)+'-12-31'],r12:[addMonths(m,-11),TODAY]}[v];
+  if(r){[rgFrom,rgTo]=r;$('#rg-from').value=rgFrom;$('#rg-to').value=rgTo}
+  renderBilling();
+}
+// Mit einem Zeitraum will man meist alle Rechnungen sehen, nicht nur offene
+$('#rg-range').addEventListener('change',e=>{if(e.target.value!=='all'&&rgFilter==='open')rgFilter='all';rgSetRange(e.target.value)});
+$('#rg-from').addEventListener('change',e=>{rgFrom=e.target.value;if(rgFilter==='open')rgFilter='all';$('#rg-range').value='custom';renderBilling()});
+$('#rg-to').addEventListener('change',e=>{rgTo=e.target.value;if(rgFilter==='open')rgFilter='all';$('#rg-range').value='custom';renderBilling()});
 document.querySelectorAll('#rg-mode button').forEach(b=>b.addEventListener('click',()=>{rgMode=b.dataset.m;renderBilling()}));
 document.querySelectorAll('#rg-seg button').forEach(b=>b.addEventListener('click',()=>{rgFilter=b.dataset.f;renderBilling()}));
 $('#rg-q').addEventListener('input',e=>{rgQuery=e.target.value;renderBilling()});
