@@ -1453,17 +1453,24 @@ function autoPlan(p){
   if(!(p&&p.number&&p.periodStart&&p.periodEnd&&p.periodEnd>=p.periodStart))return{action:'fail',reason:'nicht lesbar'};
   const mu=matchUnit(p.location), unitId=mu&&allowedOwner(UNIT[mu].owner)?mu:null;
   if(findDup(p,unitId))return{action:'skip',reason:'schon erfasst'};
-  if(p.isStorno)return{action:'review',reason:'Stornorechnung'};
+  // Rechnungen bis Ende 2025 werden ohne Rückfrage eingepflegt (nur die Wohnung muss erkennbar sein)
+  const old=p.periodEnd<'2026-01-01';
   if(!unitId)return{action:'review',reason:'Wohnung „'+(p.location||'?')+'“ nicht erkannt'};
-  if(p.issuer&&!sameOwner(p.issuer,UNIT[unitId].owner))return{action:'review',reason:'Absender passt nicht zur Wohnung'};
-  if(p.fixes&&p.fixes.length)return{action:'review',reason:'Datum auf der Rechnung fehlerhaft'};
+  if(p.isStorno){
+    if(!old)return{action:'review',reason:'Stornorechnung'};
+    const orig=p.cancels?invoices.find(i=>i.number===p.cancels&&invOwner(i)===UNIT[unitId].owner):null;
+    return{action:'storno',st:{unitId,company:p.customer||'',target:orig?.booking_id||'',shorten:false,del:false},unitId};
+  }
+  if(!old&&p.issuer&&!sameOwner(p.issuer,UNIT[unitId].owner))return{action:'review',reason:'Absender passt nicht zur Wohnung'};
+  if(!old&&p.fixes&&p.fixes.length)return{action:'review',reason:'Datum auf der Rechnung fehlerhaft'};
   const pr=priceFromInvoice(p,unitId);
   const st={unitId,company:p.customer||'',target:'',persons:pr.persons??'',price:pr.price??'',priceModel:pr.priceModel||'unit_night',extend:true,start:p.periodStart};
-  if(!st.company.trim())return{action:'review',reason:'Firma fehlt'};
+  if(!st.company.trim()){if(!old)return{action:'review',reason:'Firma fehlt'};st.company='Unbekannt'}
   const cands=bookingCandidates(unitId,st.company,p.periodStart,p.periodEnd);
   const top=cands[0];
   if(top&&top.score>=4&&!(cands[1]&&cands[1].score===top.score)){st.target=top.b.id;return{action:'auto',st,unitId}}
-  if(top&&top.score>=2)return{action:'review',reason:'Buchung nicht eindeutig'};
+  if(old&&top&&top.score>=3){st.target=top.b.id;return{action:'auto',st,unitId}}
+  if(!old&&top&&top.score>=2)return{action:'review',reason:'Buchung nicht eindeutig'};
   // Keine Personenzahl auf der Rechnung: wie viele Betten die Wohnung hat (im Notizfeld vermerkt)
   if(!(+st.persons>0)){st.persons=UNIT[unitId].cap;st.notes='Personen = Bettenzahl (beim Import angenommen)'}
   st.target='new';return{action:'auto',st,unitId,isNew:true};
@@ -1487,7 +1494,10 @@ async function bulkInvoiceImport(files){
     if(stop){res.review.push({file,p,reason:'abgebrochen'});continue}
     prog('Übernehme '+(i+1)+' von '+items.length+' …',i,items.length);
     const plan=autoPlan(p);
-    if(plan.action==='auto'){
+    if(plan.action==='storno'){
+      try{await saveStorno(file,p,plan.st);res.auto.push({file,p,unitId:plan.unitId})}
+      catch(e){res.review.push({file,p,reason:e.message||'Storno fehlgeschlagen'})}
+    }else if(plan.action==='auto'){
       try{await saveInvoice(file,p,plan.st);(plan.isNew?res.created:res.auto).push({file,p,unitId:plan.unitId})}
       catch(e){res.review.push({file,p,reason:e.message||'Speichern fehlgeschlagen'})}
     }else res[plan.action].push({file,p,reason:plan.reason});
