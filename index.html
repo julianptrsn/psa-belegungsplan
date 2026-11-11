@@ -468,7 +468,7 @@ body{background:
     </div>
     <div class="ov-grid">
       <div class="panel" id="ov-overdue-panel" hidden style="grid-column:1/-1"><header><h2>Überfällige Rechnungen</h2><span id="ov-overdue-sum"></span></header><ul class="rows" id="ov-overdue"></ul></div>
-      <div class="panel"><header><h2>Abrechnung fällig</h2><span>abgelaufene Nächte ohne Rechnung</span></header><ul class="rows" id="ov-due"></ul></div>
+      <div class="panel"><header><h2>Abrechnung fällig</h2><span>vergangene Nächte nach „abgerechnet bis“</span></header><ul class="rows" id="ov-due"></ul></div>
       <div class="panel"><header><h2>Bestätigte Abreisen (21 Tage)</h2><button class="btn small" id="btn-dep2" hidden>+ Abreise</button></header><ul class="rows" id="ov-end"></ul></div>
       <div class="panel"><header><h2>Freie Betten heute</h2><span id="ov-free-sum"></span></header><div class="freelist" id="ov-free"></div></div>
       <div class="panel"><header><h2>Anreisen in den nächsten 21 Tagen</h2><span>bestätigt &amp; reserviert</span></header><ul class="rows" id="ov-start"></ul></div>
@@ -601,7 +601,8 @@ const FAR='9999-12-31';
 // Eine fest zugesagte Abreise (Auszug) geht allen anderen Enddaten vor.
 // Belegt bis zum spätesten Datum aus Abreise/Verlängerung, bezahlter Rechnung und bestätigtem Auszug:
 // Ein bezahlter Zeitraum bleibt belegt, auch wenn die Monteure früher ausziehen.
-const lastDay=b=>[b.extendedUntil||b.endOriginal,b.invoicedUntil,b.departureConfirmed].filter(Boolean).sort().pop()||'';
+// Ist der Auszug bestätigt, ersetzt er geplante Abreise/Verlängerung (auch wenn die später lagen).
+const lastDay=b=>[b.departureConfirmed||b.extendedUntil||b.endOriginal,b.invoicedUntil].filter(Boolean).sort().pop()||'';
 const endOf=b=>{const e=lastDay(b);return e?addDays(e,1):FAR};
 const endTxt=b=>lastDay(b)?fmt(lastDay(b)):'offen';
 const perNight=b=>{const p=+b.price||0,n=+b.persons||0;switch(b.priceModel){case'pp_night':return p*n;case'unit_night':return p;case'pp_month':return p*n/30;case'unit_month':return p/30;default:return 0}};
@@ -773,6 +774,12 @@ function renderKpis(){
   );
 }
 
+async function markMovedOut(b,btn){
+  if(btn)btn.disabled=true;
+  const {data,error}=await sb.from('bookings').update({departure_confirmed:b.invoicedUntil}).eq('id',b.id).select('id');
+  if(error||!data?.length){if(btn)btn.disabled=false;toast(error?'Speichern hat nicht geklappt: '+error.message:'Du hast für diesen Plan nur Leserechte.');return}
+  toast((b.company||'Buchung')+': Auszug am '+fmt(b.invoicedUntil)+' gespeichert');await loadBookings();
+}
 function rowItem(b,right){
   return el('li',{onclick:()=>openDrawer(b.id),tabindex:'0',onkeydown:e=>{if(e.key==='Enter')openDrawer(b.id)}},
     el('div',{class:'main'},el('div',{class:'t',text:b.company||'Ohne Firma'}),el('div',{class:'s',text:unitName(b.unitId)+' · '+(b.persons||0)+' Pers.'})),
@@ -885,7 +892,12 @@ function renderOverview(){
   const due=SB().map(b=>({b,bl:billing(b)})).filter(x=>x.bl.days>0).sort((a,c)=>c.bl.days-a.bl.days);
   $('#ov-due').replaceChildren(...(due.length?due.map(({b,bl})=>rowItem(b,el('div',{},
       el('span',{class:'pill '+(bl.days>=30||phase(b)==='past'?'bad':'warn'),text:bl.days+' Nächte · '+eur(bl.amount)}),
-      el('div',{class:'s',style:'font-size:12px;color:var(--muted);margin-top:3px',text:'abgerechnet bis '+fmt(b.invoicedUntil)})))):
+      el('div',{class:'s',style:'font-size:12px;color:var(--muted);margin-top:3px',text:'abgerechnet bis '+fmt(b.invoicedUntil)}),
+      // Beendete Buchung mit Rechnung: mit einem Klick "ausgezogen am letzten abgerechneten Tag" eintragen
+      canWrite&&depReady&&phase(b)==='past'&&b.invoicedUntil&&!b.departureConfirmed&&b.invoicedUntil>=b.start?
+        el('button',{class:'btn small',style:'margin-top:6px',text:'Ausgezogen am '+fmt(b.invoicedUntil),
+          title:'Trägt den Auszug am '+fmt(b.invoicedUntil)+' ein – danach gilt die Buchung als komplett abgerechnet',
+          onclick:e=>{e.stopPropagation();markMovedOut(b,e.currentTarget)}}):null))):
     [el('li',{class:'empty',style:'cursor:default',text:loaded&&SB().length?'Alle abgelaufenen Nächte sind abgerechnet.':'Noch keine Buchungen eingetragen.'})]));
 
   const in21=addDays(TODAY,21);
