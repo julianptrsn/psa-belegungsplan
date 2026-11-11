@@ -1476,9 +1476,11 @@ function autoPlan(p){
   if(!st.company.trim()){if(!old)return{action:'review',reason:'Firma fehlt'};st.company='Unbekannt'}
   const cands=bookingCandidates(unitId,st.company,p.periodStart,p.periodEnd);
   const top=cands[0];
-  if(top&&top.score>=4&&!(cands[1]&&cands[1].score===top.score)){st.target=top.b.id;return{action:'auto',st,unitId}}
-  if(old&&top&&top.score>=3){st.target=top.b.id;return{action:'auto',st,unitId}}
-  if(!old&&top&&top.score>=2)return{action:'review',reason:'Buchung nicht eindeutig'};
+  // Wie die Vorauswahl in der Prüfansicht: passende Buchung (Firma + Zeitraum) zuordnen, sonst neue Buchung.
+  // Nachgefragt wird nur, wenn zwei Buchungen gleich gut passen.
+  if(top&&top.score>=3){
+    if(!old&&cands[1]&&cands[1].score===top.score)return{action:'review',reason:'zwei Buchungen passen gleich gut'};
+    st.target=top.b.id;return{action:'auto',st,unitId}}
   // Keine Personenzahl auf der Rechnung: wie viele Betten die Wohnung hat (im Notizfeld vermerkt)
   if(!(+st.persons>0)){st.persons=UNIT[unitId].cap;st.notes='Personen = Bettenzahl (beim Import angenommen)'}
   st.target='new';return{action:'auto',st,unitId,isNew:true};
