@@ -308,11 +308,11 @@ a.btn{text-decoration:none;color:inherit}
 
   <section class="view" id="view-ov">
     <div class="ov-grid">
+      <div class="panel" id="ov-overdue-panel" hidden style="grid-column:1/-1"><header><h2>Überfällige Rechnungen</h2><span id="ov-overdue-sum"></span></header><ul class="rows" id="ov-overdue"></ul></div>
       <div class="panel"><header><h2>Abrechnung fällig</h2><span>abgelaufene Nächte ohne Rechnung</span></header><ul class="rows" id="ov-due"></ul></div>
       <div class="panel"><header><h2>Bestätigte Abreisen (21 Tage)</h2><button class="btn small" id="btn-dep2" hidden>+ Abreise</button></header><ul class="rows" id="ov-end"></ul></div>
       <div class="panel"><header><h2>Freie Betten heute</h2><span id="ov-free-sum"></span></header><div class="freelist" id="ov-free"></div></div>
       <div class="panel"><header><h2>Anreisen in den nächsten 21 Tagen</h2><span>bestätigt &amp; reserviert</span></header><ul class="rows" id="ov-start"></ul></div>
-      <div class="panel" id="ov-overdue-panel" hidden style="grid-column:1/-1"><header><h2>Überfällige Rechnungen</h2><span id="ov-overdue-sum"></span></header><ul class="rows" id="ov-overdue"></ul></div>
       <div class="panel" id="ov-orphan-panel" hidden style="grid-column:1/-1"><header><h2>Rechnungen ohne Buchung</h2><span>die Buchung wurde gelöscht – tippen, um sie neu anzulegen</span></header><ul class="rows" id="ov-orphan"></ul></div>
       <div class="panel" id="ov-open-panel" hidden style="grid-column:1/-1"><header><h2>Ohne Abreise und ohne Rechnung</h2><span>gelten als belegt ohne Ende – bitte Abreise eintragen</span></header><ul class="rows" id="ov-open"></ul></div>
       <div class="panel" id="ov-chg-panel" hidden style="grid-column:1/-1"><header><h2>Wechseltage</h2><span>Abreise und Anreise am selben Tag – Reinigung und Schlüssel gut planen</span></header><ul class="rows" id="ov-chg"></ul></div>
