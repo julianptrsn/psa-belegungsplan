@@ -272,6 +272,17 @@ td .s{font-size:12px;color:var(--muted)}
 .ro-note{font-size:13px;color:var(--muted)}
 /* Rechnungsstellung */
 .filters .grow{flex:1}
+.menu{position:relative}
+.menu>summary{list-style:none;cursor:pointer}
+.menu>summary::-webkit-details-marker{display:none}
+.menu-list{position:absolute;z-index:5;top:calc(100% + 6px);left:0;min-width:240px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px;box-shadow:0 10px 30px rgb(0 0 0/.25);display:grid}
+.menu-list .mi{border:0;background:none;text-align:left;padding:8px 10px;border-radius:7px;font-size:14px;cursor:pointer;color:var(--fg)}
+.menu-list .mi:hover{background:var(--sunk)}
+.menu-list .mi.danger{color:var(--bad)}
+.menu-list hr{border:0;border-top:1px solid var(--line-soft);margin:4px 2px}
+/* Im Seitenpanel klappt das Menü nach unten auf statt zu überlagern (das Panel scrollt) */
+.drawer .menu[open]{flex-basis:100%}
+.drawer .menu-list{position:static;margin-top:8px;box-shadow:none;min-width:0}
 .rg-dates{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .rg-dates select,.rg-dates input{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:13px}
 .rg-sum{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted);margin:0 0 10px}
@@ -2548,13 +2559,38 @@ async function openInvoiceDetail(id){
       const pd=el('input',{type:'date',value:TODAY,id:'pd-date'});
       actions.append(el('div',{class:'field'},el('label',{for:'pd-date',text:'Zahlungseingang'}),el('div',{style:'display:flex;gap:8px'},pd,el('button',{class:'btn primary',onclick:async()=>{if(!pd.value){toast('Bitte ein Datum wählen.');return}await setPaid(i,pd.value)}},'Als bezahlt markieren'))));
     }
-    if(i.source==='tool'){
-      actions.append(el('div',{class:'quick'},el('button',{class:'btn danger small',onclick:()=>confirmBox.replaceChildren(el('div',{class:'confirm'},
-        el('span',{text:'Rechnung '+i.number+' stornieren? Es wird eine Stornorechnung mit eigener Nummer erstellt'+(i.booking_id?' und „Rechnung geschrieben bis“ zurückgesetzt':'')+'.'}),
-        el('button',{class:'btn small danger',onclick:async e=>{e.target.disabled=true;await stornoInvoice(i)}},'Stornieren'),
-        el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')))},'Stornieren')));
-    }
   }
+  // Aktionen wie in Zervant
+  const isOpen=['open','overdue'].includes(st.key)||(i.source!=='tool'&&!i.paid_at&&!i.is_storno&&st.key!=='cancelled');
+  const askStorno=()=>confirmBox.replaceChildren(el('div',{class:'confirm'},
+    el('span',{text:'Rechnung '+i.number+' stornieren? Es wird eine Stornorechnung mit eigener Nummer erstellt'+(i.booking_id?' und „Rechnung geschrieben bis“ zurückgesetzt':'')+'.'}),
+    el('button',{class:'btn small danger',onclick:async e=>{e.target.disabled=true;await(i.source==='tool'?stornoInvoice(i):stornoImported(i))}},'Stornieren'),
+    el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')));
+  const askDelete=()=>confirmBox.replaceChildren(el('div',{class:'confirm'},
+    el('span',{text:'Importierte Rechnung '+i.number+' samt PDF aus dem Tool löschen? In Zervant bleibt sie erhalten.'}),
+    el('button',{class:'btn small danger',onclick:async e=>{e.target.disabled=true;await deleteImported(i)}},'Löschen'),
+    el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')));
+  const menu=el('details',{class:'menu'},el('summary',{class:'btn small'},'Mehr ▾'));
+  const mi=(label,fn,cls)=>el('button',{type:'button',class:'mi'+(cls?' '+cls:''),onclick:()=>{menu.open=false;fn()}},label);
+  const pdfMode=async(mode,name)=>{try{downloadBytes(await buildInvoicePdf(invDoc(i),{mode}),name+'_'+String(i.number).replace(/[^A-Za-z0-9._-]/g,'_')+'.pdf','application/pdf')}catch(e){toast('PDF ging nicht: '+e.message)}};
+  menu.append(el('div',{class:'menu-list'},
+    canWrite&&!i.is_storno?mi('Per E-Mail versenden',()=>openSendDrawer(i,'invoice')):null,
+    canWrite&&i.source==='tool'&&!i.is_storno?mi('Als E-Rechnung versenden',()=>openSendDrawer(i,'xrechnung')):null,
+    i.source==='tool'&&!i.is_storno?mi('E-Rechnung (XML) herunterladen',()=>downloadXRechnung(i)):null,
+    mi('PDF herunterladen',()=>downloadInvoicePdf(i)),
+    el('hr'),
+    canWrite&&!i.is_storno&&st.key!=='cancelled'?mi('Stornorechnung',askStorno):null,
+    !i.is_storno?mi('Lieferschein',()=>pdfMode('delivery','Lieferschein')):null,
+    i.paid_at?mi('Beleg herunterladen',()=>pdfMode('receipt','Zahlungsbeleg')):null,
+    canWrite&&!i.is_storno?mi('Als neu kopieren',()=>copyInvoice(i)):null,
+    canWrite&&i.source!=='tool'?mi('Löschen',askDelete,'danger'):null));
+  const toolbar=el('div',{class:'quick'},
+    canWrite&&isOpen?el('button',{class:'btn small',onclick:()=>openSendDrawer(i,'reminder')},(i.dunning_level?'Nächste Mahnung':'Zahlungserinnerung')+' senden'):null,
+    i.file_path||i.source==='tool'?el('button',{class:'btn small',onclick:()=>i.file_path?showInvoicePdf(i):buildInvoicePdf(invDoc(i)).then(openPdfBlob)},'Anzeigen'):null,
+    menu);
+  actions.prepend(toolbar);
+  const sentInfo=[i.sent_at?'Versendet am '+fmt(i.sent_at.slice(0,10)):'',i.dunning_level?(i.dunning_level>=2?i.dunning_level+'. Mahnung':'Zahlungserinnerung')+' am '+fmt(i.dunning_at):''].filter(Boolean).join(' · ');
+  if(sentInfo)actions.append(el('div',{class:'hint',text:sentInfo}));
   if(canWrite&&i.source==='tool'&&!i.file_path){
     actions.append(el('div',{class:'warnbox'},el('span',{text:'Das PDF fehlt noch. '}),el('button',{class:'btn small',onclick:async e=>{e.target.disabled=true;const ok=await storeInvoicePdf(i);toast(ok?'PDF abgelegt':'PDF konnte nicht abgelegt werden');await loadBookings();openInvoiceDetail(i.id)}},'PDF erzeugen')));
   }
@@ -2562,7 +2598,7 @@ async function openInvoiceDetail(id){
   const body=el('div',{class:'body'},summary,el('div',{},el('span',{class:'pill '+st.cls,text:st.label})),linesView,
     i.notes?el('div',{class:'hint',text:'Hinweis: '+i.notes}):null,actions,confirmBox,
     b?el('button',{class:'btn small',style:'justify-self:start',onclick:()=>openDrawer(b.id)},'Zur Buchung: '+(b.company||'')+' · '+fmt(b.start)+' – '+endTxt(b)):null);
-  const footer=el('footer',{},url?el('a',{class:'btn',href:url,target:'_blank',rel:'noopener'},'PDF öffnen'):null,el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Schließen'));
+  const footer=el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Schließen'));
   showDrawer((i.is_storno?'Storno ':'Rechnung ')+i.number,body,footer);
 }
 async function setPaid(i,date){
@@ -2586,6 +2622,228 @@ async function stornoInvoice(i){
   await loadBookings();toast('Storno '+data.number+' erstellt');openInvoiceDetail(data.id);
 }
 
+/* ===== Rechnungsaktionen (wie in Zervant): Anzeigen, E-Mail, Zahlungserinnerung, E-Rechnung, PDF, Storno, Lieferschein, Beleg, Kopieren, Löschen ===== */
+// Einheitliche Sicht auf eine Rechnung – auch für Zervant-Importe (Positionen, Absender, Kunde)
+function invDoc(i){
+  const owner=invOwner(i)||'PSA Immobilien';
+  const c=(i.customer_id&&customers.find(x=>x.id===i.customer_id))||customers.find(x=>sameCo(custName(x),i.customer));
+  const lines=Array.isArray(i.lines)&&i.lines.length?i.lines:
+    (Array.isArray(i.positions)&&i.positions.length?i.positions.map(p=>({kind:/übernacht/i.test(p.d||'')?'night':'other',text:p.d||'Leistung',qty:+p.q||0,price:+p.u||0,vat:+p.v||0,amount:r2((+p.q||0)*(+p.u||0))})):
+    [{kind:'other',text:i.location_text||'Leistung',qty:1,price:+i.net||0,vat:i.vat_rate!=null?+i.vat_rate:(+i.net?Math.round(+i.vat/+i.net*100):0),amount:+i.net||0}]);
+  return{...i,lines,issuer:owner,issuer_snapshot:i.issuer_snapshot||issuers[owner]||{name:owner},
+    customer_snapshot:i.customer_snapshot||(c?customerSnapshot(c):{name:i.customer||'',company_name:i.customer||'',kind:'company'}),
+    interest_note:bset?.interest_note||'',customerRec:c||null};
+}
+const invFileBase=i=>(i.is_storno?'Storno_':'Rechnung_')+String(i.number).replace(/[^A-Za-z0-9._-]/g,'_');
+function downloadBytes(bytes,name,mime){
+  const url=URL.createObjectURL(new Blob([bytes],{type:mime}));
+  const a=el('a',{href:url,download:name});document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+async function invoicePdfBytes(i){
+  if(i.file_path){const {data}=await sb.storage.from('rechnungen').download(i.file_path);if(data)return new Uint8Array(await data.arrayBuffer())}
+  return await buildInvoicePdf(invDoc(i));
+}
+async function downloadInvoicePdf(i){try{downloadBytes(await invoicePdfBytes(i),invFileBase(i)+'.pdf','application/pdf')}catch(e){toast('PDF konnte nicht geladen werden.')}}
+
+/* --- Zahlungserinnerung / Mahnung --- */
+function reminderLevel(i){return Math.min(3,(+i.dunning_level||0)+1)}
+async function buildReminderPdf(i,level){
+  const {PDFDocument,StandardFonts,rgb}=await loadPdfLib();
+  const d=invDoc(i),is=d.issuer_snapshot,cs=d.customer_snapshot;
+  const doc=await PDFDocument.create();const F=await doc.embedFont(StandardFonts.Helvetica),FB=await doc.embedFont(StandardFonts.HelveticaBold);
+  const W=595.28,H=841.89,L=56,R=W-56,ink=rgb(.08,.16,.18),mute=rgb(.36,.44,.46),line=rgb(.82,.86,.86),acc=rgb(.114,.373,.431);
+  const page=doc.addPage([W,H]);
+  const txt=(s,x,y,o={})=>{const f=o.bold?FB:F,size=o.size||9.5,t=pdfSafe(s);let xx=x;if(o.align==='right')xx=x-f.widthOfTextAtSize(t,size);else if(o.align==='center')xx=x-f.widthOfTextAtSize(t,size)/2;page.drawText(t,{x:xx,y,size,font:f,color:o.color||ink})};
+  const wrap=(s,width,size)=>{const out=[];String(s??'').split('\n').forEach(par=>{let cur='';pdfSafe(par).split(' ').forEach(w=>{const t=cur?cur+' '+w:w;if(F.widthOfTextAtSize(t,size)>width&&cur){out.push(cur);cur=w}else cur=t});out.push(cur)});return out};
+  const hline=(y,x1=L,x2=R,c=line,t=.6)=>page.drawLine({start:{x:x1,y},end:{x:x2,y},thickness:t,color:c});
+  const money=n=>num2(n)+' €';
+  const title=level>=2?level+'. Mahnung':'Zahlungserinnerung';
+  const fee=level>=2?+(bset?.dunning2_fee??40):0, newDue=addDays(TODAY,7);
+  if((d.issuer)==='PSA Immobilien'){const img=await doc.embedJpg(PSA_LOGO);page.drawImage(img,{x:R-64,y:H-116,width:64,height:64})}
+  txt(is.name||'',L,H-60,{bold:true,size:13});if(is.contact_name)txt(is.contact_name,L,H-74,{color:mute});
+  txt([is.street,[is.zip,is.city].filter(Boolean).join(' ')].filter(Boolean).join(' • '),L,H-(is.contact_name?86:74),{color:mute});
+  let y=H-160;
+  const recip=[cs.kind==='private'?cs.name:cs.company_name||cs.name,cs.kind==='company'&&(cs.first_name||cs.last_name)?[cs.first_name,cs.last_name].filter(Boolean).join(' '):'',cs.street,cs.street2,[cs.zip,cs.city].filter(Boolean).join(' ')].filter(Boolean);
+  recip.forEach((r,ix)=>txt(r,L,y-ix*13,{size:10.5,bold:ix===0}));
+  let my=H-150;[['Datum',fmtL(TODAY)],['Rechnungsnummer',i.number],['Rechnungsdatum',fmtL(i.invoice_date)],['Fällig seit',fmtL(i.due_date)]].forEach(([a,b])=>{txt(a,R-205,my,{size:9,color:mute});txt(b,R,my,{size:9,align:'right',bold:a==='Rechnungsnummer'});my-=14});
+  y=Math.min(y-recip.length*13,my)-34;
+  txt(title,L,y,{bold:true,size:19,color:acc});y-=26;
+  const intro=level>=2?'leider konnten wir trotz unserer Zahlungserinnerung noch keinen Zahlungseingang für die unten aufgeführte Rechnung feststellen. Wir bitten Sie, den offenen Betrag einschließlich der gesetzlichen Verzugspauschale (§ 288 Abs. 5 BGB) bis zum '+fmtL(newDue)+' zu überweisen.'
+    :'sicher ist es Ihrer Aufmerksamkeit entgangen: Für die unten aufgeführte Rechnung konnten wir noch keinen Zahlungseingang feststellen. Wir bitten Sie, den offenen Betrag bis zum '+fmtL(newDue)+' zu überweisen.';
+  [ 'Sehr geehrte Damen und Herren,', intro ].forEach(p=>{wrap(p,R-L,10).forEach(t=>{txt(t,L,y,{size:10});y-=14});y-=6});
+  y-=6;txt('Rechnung',L,y,{size:8.5,bold:true,color:mute});txt('Leistungszeitraum',L+120,y,{size:8.5,bold:true,color:mute});txt('Fällig',R-120,y,{size:8.5,bold:true,color:mute,align:'right'});txt('Betrag',R,y,{size:8.5,bold:true,color:mute,align:'right'});y-=7;hline(y,L,R,ink,.7);
+  y-=15;txt(i.number,L,y);txt(fmtL(i.period_start)+' – '+fmtL(i.period_end),L+120,y);txt(fmtL(i.due_date),R-120,y,{align:'right'});txt(money(+i.total),R,y,{align:'right'});y-=6;hline(y);
+  if(fee){y-=15;txt('Verzugspauschale gemäß § 288 Abs. 5 BGB',L,y);txt(money(fee),R,y,{align:'right'});y-=6;hline(y)}
+  y-=18;txt('Offener Betrag',R-110,y,{align:'right',bold:true,size:11});txt(money(+i.total+fee),R,y,{align:'right',bold:true,size:11});
+  y-=30;
+  [ 'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer '+i.number+' auf das unten genannte Konto. Sollten Sie die Zahlung bereits veranlasst haben, betrachten Sie dieses Schreiben bitte als gegenstandslos.',
+    level>=2&&bset?.interest_note?bset.interest_note:null,'Mit freundlichen Grüßen',is.contact_name||is.name ].filter(Boolean).forEach(p=>{wrap(p,R-L,10).forEach(t=>{txt(t,L,y,{size:10});y-=14});y-=6});
+  const reg=[is.register_no,is.register_court].filter(Boolean).join(' · ');
+  const rows=[[is.name,[is.street,[is.zip,is.city].filter(Boolean).join(' ')].filter(Boolean).join(', '),is.email,is.phone,is.website].filter(Boolean).join('  •  '),
+    [is.tax_number?'Steuernummer '+is.tax_number:'',is.vat_id?'USt-IdNr. '+is.vat_id:'',reg].filter(Boolean).join('  •  '),
+    [is.bank,is.iban?'IBAN '+is.iban.replace(/(.{4})/g,'$1 ').trim():'',is.bic?'BIC '+is.bic:'',is.account_holder?'Kontoinhaber '+is.account_holder:''].filter(Boolean).join('  •  ')];
+  hline(66);rows.forEach((r,ix)=>txt(r,W/2,54-ix*10,{size:7.2,color:mute,align:'center'}));
+  doc.setTitle(pdfSafe(title+' '+i.number));
+  return{bytes:await doc.save(),title,fee,newDue};
+}
+
+/* --- E-Rechnung (XRechnung 3.0, UBL) --- */
+const xmlEsc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const xAmt=n=>(Math.round((+n+Number.EPSILON)*100)/100).toFixed(2);
+function xrechnungProblems(i){
+  const d=invDoc(i),is=d.issuer_snapshot,cs=d.customer_snapshot,c=d.customerRec;const p=[];
+  if(i.source!=='tool')p.push('E-Rechnungen gibt es nur für Rechnungen aus dem Tool.');
+  if(i.is_storno)p.push('Für Stornorechnungen wird keine E-Rechnung erzeugt.');
+  if(!is.email)p.push('E-Mail des Absenders fehlt (Einstellungen).');
+  if(!is.phone)p.push('Telefonnummer des Absenders fehlt (Einstellungen) – für E-Rechnungen Pflicht.');
+  if(!is.iban)p.push('IBAN des Absenders fehlt.');
+  if(!(is.vat_id||is.tax_number))p.push('USt-IdNr. oder Steuernummer des Absenders fehlt.');
+  const mail=(cs.emails||[])[0]||(c?.emails||[])[0];if(!mail)p.push('E-Mail-Adresse beim Kunden fehlt.');
+  if(!cs.street||!cs.zip||!cs.city)p.push('Rechnungsadresse beim Kunden unvollständig.');
+  return p;
+}
+function buildXRechnung(i){
+  const d=invDoc(i),is=d.issuer_snapshot,cs=d.customer_snapshot,c=d.customerRec;
+  const buyerMail=(cs.emails||[])[0]||(c?.emails||[])[0]||'';
+  const buyerRef=cs.leitweg_id||c?.leitweg_id||cs.customer_no||c?.customer_no||i.number;
+  const cat=v=>+v>0?'S':'Z';
+  const rates={};d.lines.forEach(l=>{const k=+l.vat;rates[k]=(rates[k]||0)+(+l.amount)});
+  const sub=Object.keys(rates).map(Number).sort((a,b)=>a-b).map(r=>({r,base:r2(rates[r]),tax:r2(rates[r]*r/100)}));
+  const net=r2(d.lines.reduce((t,l)=>t+(+l.amount),0)),vat=r2(sub.reduce((t,x)=>t+x.tax,0)),total=r2(net+vat);
+  const addr=(o,cc)=>`<cac:PostalAddress><cbc:StreetName>${xmlEsc(o.street)}</cbc:StreetName>${o.street2?`<cbc:AdditionalStreetName>${xmlEsc(o.street2)}</cbc:AdditionalStreetName>`:''}<cbc:CityName>${xmlEsc(o.city)}</cbc:CityName><cbc:PostalZone>${xmlEsc(o.zip)}</cbc:PostalZone><cac:Country><cbc:IdentificationCode>${xmlEsc(cc||'DE')}</cbc:IdentificationCode></cac:Country></cac:PostalAddress>`;
+  const taxScheme=(id,scheme)=>`<cac:PartyTaxScheme><cbc:CompanyID>${xmlEsc(id)}</cbc:CompanyID><cac:TaxScheme><cbc:ID>${scheme}</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>`;
+  const buyerName=cs.kind==='private'?cs.name:(cs.company_name||cs.name);
+  const note=[i.notes,i.lodging_exempt?'Keine Beherbergungsabgabe: '+(i.lodging_exempt_note||''):''].filter(Boolean).join('\n');
+  const due=i.due_date||i.invoice_date;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<ubl:Invoice xmlns:ubl="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+<cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID>
+<cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>
+<cbc:ID>${xmlEsc(i.number)}</cbc:ID>
+<cbc:IssueDate>${i.invoice_date}</cbc:IssueDate>
+<cbc:DueDate>${due}</cbc:DueDate>
+<cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>
+${note?`<cbc:Note>${xmlEsc(note)}</cbc:Note>\n`:''}<cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>
+<cbc:BuyerReference>${xmlEsc(buyerRef)}</cbc:BuyerReference>
+<cac:InvoicePeriod><cbc:StartDate>${i.period_start}</cbc:StartDate><cbc:EndDate>${i.period_end}</cbc:EndDate></cac:InvoicePeriod>
+<cac:AccountingSupplierParty><cac:Party>
+<cbc:EndpointID schemeID="EM">${xmlEsc(is.email)}</cbc:EndpointID>
+<cac:PartyName><cbc:Name>${xmlEsc(is.name)}</cbc:Name></cac:PartyName>
+${addr(is,'DE')}
+${is.vat_id?taxScheme(is.vat_id.replace(/\s/g,''),'VAT'):''}${is.tax_number?taxScheme(is.tax_number,'FC'):''}
+<cac:PartyLegalEntity><cbc:RegistrationName>${xmlEsc(is.name)}</cbc:RegistrationName>${is.register_no?`<cbc:CompanyID>${xmlEsc(is.register_no)}</cbc:CompanyID>`:''}</cac:PartyLegalEntity>
+<cac:Contact><cbc:Name>${xmlEsc(is.contact_name||is.name)}</cbc:Name><cbc:Telephone>${xmlEsc(is.phone)}</cbc:Telephone><cbc:ElectronicMail>${xmlEsc(is.email)}</cbc:ElectronicMail></cac:Contact>
+</cac:Party></cac:AccountingSupplierParty>
+<cac:AccountingCustomerParty><cac:Party>
+<cbc:EndpointID schemeID="EM">${xmlEsc(buyerMail)}</cbc:EndpointID>
+${addr(cs,cs.country)}
+${cs.vat_id?taxScheme(cs.vat_id.replace(/\s/g,''),'VAT'):''}
+<cac:PartyLegalEntity><cbc:RegistrationName>${xmlEsc(buyerName)}</cbc:RegistrationName></cac:PartyLegalEntity>
+${cs.kind==='company'&&(cs.first_name||cs.last_name)?`<cac:Contact><cbc:Name>${xmlEsc([cs.first_name,cs.last_name].filter(Boolean).join(' '))}</cbc:Name></cac:Contact>`:''}
+</cac:Party></cac:AccountingCustomerParty>
+<cac:PaymentMeans><cbc:PaymentMeansCode>58</cbc:PaymentMeansCode><cbc:PaymentID>${xmlEsc(i.number)}</cbc:PaymentID><cac:PayeeFinancialAccount><cbc:ID>${xmlEsc((is.iban||'').replace(/\s/g,''))}</cbc:ID>${is.account_holder?`<cbc:Name>${xmlEsc(is.account_holder)}</cbc:Name>`:''}${is.bic?`<cac:FinancialInstitutionBranch><cbc:ID>${xmlEsc(is.bic)}</cbc:ID></cac:FinancialInstitutionBranch>`:''}</cac:PayeeFinancialAccount></cac:PaymentMeans>
+<cac:PaymentTerms><cbc:Note>${due===i.invoice_date?'Zahlbar sofort ohne Abzug.':'Zahlbar ohne Abzug bis '+fmtL(due)+'.'}</cbc:Note></cac:PaymentTerms>
+<cac:TaxTotal><cbc:TaxAmount currencyID="EUR">${xAmt(vat)}</cbc:TaxAmount>
+${sub.map(x=>`<cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">${xAmt(x.base)}</cbc:TaxableAmount><cbc:TaxAmount currencyID="EUR">${xAmt(x.tax)}</cbc:TaxAmount><cac:TaxCategory><cbc:ID>${cat(x.r)}</cbc:ID><cbc:Percent>${x.r}</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal>`).join('\n')}
+</cac:TaxTotal>
+<cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="EUR">${xAmt(net)}</cbc:LineExtensionAmount><cbc:TaxExclusiveAmount currencyID="EUR">${xAmt(net)}</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">${xAmt(total)}</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">${xAmt(total)}</cbc:PayableAmount></cac:LegalMonetaryTotal>
+${d.lines.map((l,ix)=>`<cac:InvoiceLine><cbc:ID>${ix+1}</cbc:ID><cbc:InvoicedQuantity unitCode="${l.kind==='night'?'DAY':'C62'}">${+l.qty}</cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="EUR">${xAmt(l.amount)}</cbc:LineExtensionAmount><cac:Item><cbc:Name>${xmlEsc(l.text||'Leistung')}</cbc:Name><cac:ClassifiedTaxCategory><cbc:ID>${cat(l.vat)}</cbc:ID><cbc:Percent>${+l.vat}</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory></cac:Item><cac:Price><cbc:PriceAmount currencyID="EUR">${xAmt(l.price)}</cbc:PriceAmount></cac:Price></cac:InvoiceLine>`).join('\n')}
+</ubl:Invoice>
+`;
+}
+function downloadXRechnung(i){const p=xrechnungProblems(i);if(p.length){toast(p[0]);return false}downloadBytes(new TextEncoder().encode(buildXRechnung(i)),invFileBase(i)+'_XRechnung.xml','application/xml');return true}
+
+/* --- Versand per E-Mail: Anhänge werden heruntergeladen, das Mailprogramm öffnet sich vorausgefüllt --- */
+// Direkter Versand aus dem Tool folgt mit dem Mail-Dienst (Etappe 2).
+function openSendDrawer(i,kind){
+  const d=invDoc(i),is=d.issuer_snapshot,cs=d.customer_snapshot,c=d.customerRec;
+  const en=(cs.language||c?.language)==='en';
+  const to=[...new Set([...(cs.emails||[]),...(c?.emails||[])])].join(', ');
+  const level=kind==='reminder'?reminderLevel(i):0;
+  const fee=level>=2?+(bset?.dunning2_fee??40):0;
+  const title=kind==='reminder'?(level>=2?level+'. Mahnung':'Zahlungserinnerung'):kind==='xrechnung'?'E-Rechnung':'Rechnung';
+  const st={to,subject:'',body:''};
+  const greet=en?'Dear Sir or Madam,':'Sehr geehrte Damen und Herren,';
+  const sign=(en?'Kind regards':'Mit freundlichen Grüßen')+'\n'+(is.contact_name||'')+'\n'+(is.name||'')+(is.phone?'\n'+is.phone:'')+(is.email?'\n'+is.email:'');
+  if(kind==='reminder'){
+    st.subject=title+' zu Rechnung '+i.number+' – '+(is.name||'');
+    st.body=greet+'\n\n'+(level>=2?'leider konnten wir trotz unserer Zahlungserinnerung noch keinen Zahlungseingang für die Rechnung '+i.number+' vom '+fmtL(i.invoice_date)+' über '+eur2(+i.total)+' feststellen. Zuzüglich der gesetzlichen Verzugspauschale von '+eur2(fee)+' bitten wir um Ausgleich von '+eur2(+i.total+fee)+' bis zum '+fmtL(addDays(TODAY,7))+'.'
+      :'für die Rechnung '+i.number+' vom '+fmtL(i.invoice_date)+' über '+eur2(+i.total)+' (fällig am '+fmtL(i.due_date)+') konnten wir noch keinen Zahlungseingang feststellen. Wir bitten um Überweisung bis zum '+fmtL(addDays(TODAY,7))+'.')+
+      '\n\n'+(en?'The reminder is attached.':'Das Schreiben finden Sie im Anhang. Sollten Sie bereits gezahlt haben, betrachten Sie diese E-Mail bitte als gegenstandslos.')+'\n\n'+sign;
+  }else{
+    st.subject=(en?'Invoice ':'Rechnung ')+i.number+' – '+(is.name||'');
+    st.body=greet+'\n\n'+(en?'please find attached our invoice '+i.number+' for '+locText(i.unit_id)+' ('+fmtL(i.period_start)+' – '+fmtL(i.period_end)+') amounting to '+eur2(+i.total)+'.'
+      :'anbei erhalten Sie unsere '+(kind==='xrechnung'?'E-Rechnung (XRechnung) ':'Rechnung ')+i.number+(i.unit_id?' für '+locText(i.unit_id):'')+(i.period_start&&i.period_end&&i.period_start!==i.period_end?' ('+fmtL(i.period_start)+' – '+fmtL(i.period_end)+')':'')+' über '+eur2(+i.total)+'.')+
+      (i.due_date&&!i.is_storno?'\n'+(en?'Payment is due on '+fmtL(i.due_date)+'.':'Bitte überweisen Sie den Betrag bis zum '+fmtL(i.due_date)+' unter Angabe der Rechnungsnummer.'):'')+'\n\n'+sign;
+  }
+  const toIn=el('input',{id:'sm-to',value:st.to,placeholder:'kunde@firma.de'});toIn.addEventListener('input',()=>st.to=toIn.value);
+  const subIn=el('input',{id:'sm-sub',value:st.subject});subIn.addEventListener('input',()=>st.subject=subIn.value);
+  const bodyIn=el('textarea',{id:'sm-body',rows:'10'});bodyIn.value=st.body;bodyIn.addEventListener('input',()=>st.body=bodyIn.value);
+  const files=kind==='reminder'?[title+' '+i.number+'.pdf']:kind==='xrechnung'?[invFileBase(i)+'_XRechnung.xml',invFileBase(i)+'.pdf']:[invFileBase(i)+'.pdf'];
+  const problems=kind==='xrechnung'?xrechnungProblems(i):[];
+  const go=el('button',{class:'btn primary'},'Anhang laden & Mailprogramm öffnen');go.disabled=!!problems.length;
+  go.addEventListener('click',async()=>{
+    if(!st.to.trim()){toast('Bitte eine Empfängeradresse eintragen.');return}
+    go.disabled=true;
+    try{
+      if(kind==='reminder'){const r=await buildReminderPdf(i,level);downloadBytes(r.bytes,files[0],'application/pdf')}
+      else if(kind==='xrechnung'){downloadXRechnung(i);await downloadInvoicePdf(i)}
+      else await downloadInvoicePdf(i);
+    }catch(e){go.disabled=false;toast('Anhang konnte nicht erzeugt werden: '+e.message);return}
+    location.href='mailto:'+encodeURIComponent(st.to.replace(/\s/g,'')).replace(/%2C/g,',')+'?subject='+encodeURIComponent(st.subject)+'&body='+encodeURIComponent(st.body);
+    // Versand vermerken
+    if(canWrite){
+      const upd=kind==='reminder'?{dunning_level:level,dunning_at:TODAY}:{sent_at:new Date().toISOString()};
+      const {error}=await sb.from('invoices').update(upd).eq('id',i.id);
+      if(!error){toast(kind==='reminder'?title+' vermerkt':'Versand vermerkt');await loadBookings()}
+    }
+    go.disabled=false;
+  });
+  showDrawer(title+' per E-Mail · '+i.number,el('div',{class:'body'},
+    problems.length?el('div',{class:'warnbox'},...problems.map(t=>el('div',{text:t}))):null,
+    fld('sm-to','An',toIn,el('div',{class:'hint',text:to?'Aus dem Kundenstamm':'Keine E-Mail-Adresse beim Kunden hinterlegt'})),
+    fld('sm-sub','Betreff',subIn),fld('sm-body','Text',bodyIn),
+    el('div',{class:'field'},el('label',{text:'Anhang'}),el('div',{class:'invlist'},files.map(f=>el('span',{class:'row'},el('span',{text:f}),el('b',{text:f.endsWith('.xml')?'XML':'PDF'}))))),
+    el('div',{class:'hint',text:'Der Anhang wird heruntergeladen und dein Mailprogramm öffnet sich mit Empfänger, Betreff und Text. Bitte die Datei aus dem Download-Ordner anhängen und senden. Der direkte Versand aus dem Tool folgt mit dem Mail-Dienst.'}),
+    kind==='reminder'&&fee?el('div',{class:'hint',text:'Mit Verzugspauschale '+eur2(fee)+' (ab der 2. Mahnung).'}):null),
+    el('footer',{},el('button',{class:'btn',onclick:()=>openInvoiceDetail(i.id)},'Zurück'),el('span',{class:'grow'}),go),true);
+}
+
+/* --- Storno für Zervant-Importe (Storno bekommt eine Nummer aus dem Tool) --- */
+async function stornoImported(i){
+  const d=invDoc(i);
+  const lines=d.lines.map(l=>({...l,qty:-(+l.qty),amount:-(+l.amount)}));
+  const owner=i.unit_id?UNIT[i.unit_id]?.owner:d.issuer;
+  const payload={issuer:owner,customer:i.customer,customer_id:d.customerRec?.id||'',customer_snapshot:d.customer_snapshot,unit_id:i.unit_id,location_text:i.location_text||locText(i.unit_id),
+    period_start:i.period_start,period_end:i.period_end,booking_id:i.booking_id||'',quantity:i.quantity!=null?-(+i.quantity):null,unit_price:i.unit_price,vat_rate:i.vat_rate,
+    net:r2(-(+i.net)),vat:r2(-(+i.vat)),total:r2(-(+i.total)),lines,payment_days:0,is_storno:true,cancels:i.number,notes:''};
+  const {data,error}=await sb.rpc('create_invoice',{p:payload});
+  if(error||!data){toast('Storno ging nicht: '+(error?.message||''));return}
+  await storeInvoicePdf({...data,cancels_date:i.invoice_date});
+  if(i.booking_id){const b=bookings.find(x=>x.id===i.booking_id);if(b)await sb.from('bookings').update({invoiced_until:invoicedUntilWithout(b.id,i.number)||null}).eq('id',b.id)}
+  await loadBookings();toast('Storno '+data.number+' erstellt');openInvoiceDetail(data.id);
+}
+
+/* --- Als neu kopieren: neue Rechnung mit Kunde, Wohnung und Positionen, Zeitraum direkt im Anschluss --- */
+function copyInvoice(i){
+  const d=invDoc(i);
+  const len=Math.max(1,diff(i.period_start,i.period_end)+1);
+  const from=i.period_end&&i.unit_id?addDays(i.period_end,1):TODAY, to=addDays(from,len-1);
+  const b=i.booking_id&&bookings.find(x=>x.id===i.booking_id);
+  openInvoiceDrawer({bookingId:b?b.id:null,draft:{bookingId:b?b.id:'',unitId:i.unit_id||(SU()[0]||UNITS[0]).id,customerId:d.customerRec?.id||'',from,to,depart:false,
+    lines:d.lines.filter(l=>l.kind!=='abgabe').map(l=>({kind:l.kind||'other',text:l.text,qty:l.qty,price:l.price,vat:l.vat})),
+    payDays:d.customerRec?d.customerRec.payment_days:(bset?.default_payment_days??3),notes:i.source==='tool'?(i.notes||''):(bset?.standard_note||'')}});
+  toast('Kopie: Zeitraum und Positionen bitte prüfen');
+}
+
+/* --- Löschen: nur Zervant-Importe (Tool-Rechnungen werden storniert) --- */
+async function deleteImported(i){
+  const {error}=await sb.from('invoices').delete().eq('id',i.id);
+  if(error){toast('Löschen hat nicht geklappt: '+error.message);return}
+  if(i.file_path)await sb.storage.from('rechnungen').remove([i.file_path]);
+  if(i.booking_id){invoices=invoices.filter(x=>x.id!==i.id);const b=bookings.find(x=>x.id===i.booking_id);if(b)await sb.from('bookings').update({invoiced_until:invoicedUntilWithout(b.id)||null}).eq('id',b.id)}
+  closeDrawer();toast('Rechnung '+i.number+' gelöscht');await loadBookings();
+}
 /* --- Einstellungen --- */
 function openBillingSettings(){
   if(!billingReady||!canWrite)return;
@@ -2654,13 +2912,16 @@ function pdfSafe(s){return String(s??'').replace(/[\t\r]/g,' ').split('').map(ch
   if(c===10||(c>=32&&c<=126)||(c>=160&&c<=255)||WINANSI_EXTRA.includes(ch))return ch;
   const base=ch.normalize('NFD').replace(/[̀-ͯ]/g,'');const m={'ł':'l','Ł':'L','đ':'d','Đ':'D','ı':'i','ș':'s','ț':'t','Ș':'S','Ț':'T'}[ch];
   return m||(base&&base.charCodeAt(0)<256?base:'?')}).join('')}
-async function buildInvoicePdf(inv){
+// opt.mode: 'invoice' (Standard), 'delivery' (Lieferschein ohne Preise), 'receipt' (Zahlungsbeleg)
+async function buildInvoicePdf(inv,opt={}){
+  const mode=opt.mode||'invoice';
   const {PDFDocument,StandardFonts,rgb}=await loadPdfLib();
   const doc=await PDFDocument.create();
   const F=await doc.embedFont(StandardFonts.Helvetica),FB=await doc.embedFont(StandardFonts.HelveticaBold);
   const is=inv.issuer_snapshot||issuers[inv.issuer]||{},cs=inv.customer_snapshot||{};
   const storno=!!inv.is_storno;
-  doc.setTitle(pdfSafe((storno?'Stornorechnung ':'Rechnung ')+inv.number));doc.setAuthor(pdfSafe(is.name||''));doc.setCreator('Belegungsplan MA-FL');doc.setProducer('pdf-lib');try{doc.setLanguage('de-DE')}catch(e){}
+  const docTitle=mode==='delivery'?'Lieferschein':mode==='receipt'?'Zahlungsbeleg':(storno?'Stornorechnung':'Rechnung');
+  doc.setTitle(pdfSafe(docTitle+' '+inv.number));doc.setAuthor(pdfSafe(is.name||''));doc.setCreator('Belegungsplan MA-FL');doc.setProducer('pdf-lib');try{doc.setLanguage('de-DE')}catch(e){}
   const W=595.28,H=841.89,L=56,R=W-56;
   const ink=rgb(.08,.16,.18),mute=rgb(.36,.44,.46),line=rgb(.82,.86,.86),acc=rgb(.114,.373,.431);
   let page=doc.addPage([W,H]);
@@ -2686,44 +2947,48 @@ async function buildInvoicePdf(inv){
   const recip=[cs.kind==='private'?cs.name:cs.company_name||cs.name,cs.kind==='company'&&(cs.first_name||cs.last_name)?[cs.first_name,cs.last_name].filter(Boolean).join(' '):'',cs.street,cs.street2,[cs.zip,cs.city].filter(Boolean).join(' '),cs.country&&cs.country!=='DE'?({DK:'Dänemark',PL:'Polen',NL:'Niederlande',AT:'Österreich',RO:'Rumänien',LT:'Litauen',CZ:'Tschechien',SE:'Schweden',NO:'Norwegen'}[cs.country]||cs.country):''].filter(Boolean);
   recip.forEach((r,ix)=>txt(r,L,y-ix*13,{size:10.5,bold:ix===0}));
   // Rechnungsdaten rechts
-  const meta=[[storno?'Stornorechnung Nr.':'Rechnungsnummer',inv.number],['Rechnungsdatum',fmtL(inv.invoice_date)],
+  const meta=[mode!=='invoice'?['Datum',fmtL(opt.date||TODAY)]:null,[mode==='delivery'?'Zu Rechnung Nr.':mode==='receipt'?'Zu Rechnung Nr.':storno?'Stornorechnung Nr.':'Rechnungsnummer',inv.number],['Rechnungsdatum',fmtL(inv.invoice_date)],
     ['Leistungszeitraum',fmtL(inv.period_start)+' – '+fmtL(inv.period_end)],
-    storno?null:['Fällig',!inv.due_date||inv.due_date===inv.invoice_date?'sofort':fmtL(inv.due_date)],
+    storno||mode!=='invoice'?null:['Fällig',!inv.due_date||inv.due_date===inv.invoice_date?'sofort':fmtL(inv.due_date)],
     cs.customer_no?['Kundennummer',cs.customer_no]:null,cs.vat_id?['Ihre USt-IdNr.',cs.vat_id]:cs.tax_number?['Ihre Steuernummer',cs.tax_number]:null].filter(Boolean);
   let my=H-150;meta.forEach(([a,b])=>{txt(a,R-205,my,{size:9,color:mute});txt(b,R,my,{size:9,bold:a.startsWith('Rech')||a.startsWith('Storno'),align:'right'});my-=14});
   // Titel
   y=Math.min(y-recip.length*13,my)-34;
-  txt(storno?'Stornorechnung':'Rechnung',L,y,{bold:true,size:19,color:acc});
+  txt(docTitle,L,y,{bold:true,size:19,color:acc});
   y-=18;txt(fmtL(inv.period_start)+' – '+fmtL(inv.period_end)+(inv.location_text?'  ·  '+inv.location_text:''),L,y,{size:10.5});
   if(storno&&inv.cancels){y-=14;txt('Storno zu Rechnung '+inv.cancels+(inv.cancels_date?' vom '+fmtL(inv.cancels_date):''),L,y,{size:10,color:mute})}
   // Tabelle
   const C={nr:L,desc:L+26,qty:R-205,price:R-130,vat:R-70,amt:R};
+  const noPrice=mode==='delivery';if(noPrice)C.qty=R;
   const tableHead=()=>{y-=26;txt('Nr.',C.nr,y,{size:8.5,bold:true,color:mute});txt('Beschreibung',C.desc,y,{size:8.5,bold:true,color:mute});txt('Menge',C.qty,y,{size:8.5,bold:true,color:mute,align:'right'});
-    txt('Einzelpreis',C.price,y,{size:8.5,bold:true,color:mute,align:'right'});txt('USt.',C.vat,y,{size:8.5,bold:true,color:mute,align:'right'});txt('Betrag netto',C.amt,y,{size:8.5,bold:true,color:mute,align:'right'});y-=7;hline(y,L,R,ink,.7)};
-  const newPage=()=>{foot();page=doc.addPage([W,H]);y=H-60;txt((storno?'Stornorechnung ':'Rechnung ')+inv.number+' – Fortsetzung',L,y,{size:9,color:mute});tableHead()};
+    if(!noPrice){txt('Einzelpreis',C.price,y,{size:8.5,bold:true,color:mute,align:'right'});txt('USt.',C.vat,y,{size:8.5,bold:true,color:mute,align:'right'});txt('Betrag netto',C.amt,y,{size:8.5,bold:true,color:mute,align:'right'})}y-=7;hline(y,L,R,ink,.7)};
+  const newPage=()=>{foot();page=doc.addPage([W,H]);y=H-60;txt(docTitle+' '+inv.number+' – Fortsetzung',L,y,{size:9,color:mute});tableHead()};
   tableHead();
   (inv.lines||[]).forEach((l,ix)=>{
     const dl=wrap(l.text||'',C.qty-C.desc-50,9.5);
     if(y-14*dl.length<170)newPage();
     y-=15;txt(String(ix+1),C.nr,y);dl.forEach((t,k)=>txt(t,C.desc,y-k*12));
     txt((+l.qty).toLocaleString('de-DE',{maximumFractionDigits:2}),C.qty,y,{align:'right'});
-    txt(money(+l.price),C.price,y,{align:'right'});txt(pctTxt(l.vat),C.vat,y,{align:'right'});txt(money(+l.amount),C.amt,y,{align:'right'});
+    if(!noPrice){txt(money(+l.price),C.price,y,{align:'right'});txt(pctTxt(l.vat),C.vat,y,{align:'right'});txt(money(+l.amount),C.amt,y,{align:'right'})}
     y-=(dl.length-1)*12+6;hline(y);
   });
   // Summen
   const rates={};(inv.lines||[]).forEach(l=>{rates[l.vat]=(rates[l.vat]||0)+(+l.amount)});
   const sums=[['Nettobetrag',money(+inv.net)],...Object.keys(rates).map(Number).sort((a,b)=>a-b).map(r=>['USt. '+pctTxt(r)+' auf '+money(r2(rates[r])),money(r2(rates[r]*r/100))])];
-  if(y<230)newPage();
+  if(!noPrice){if(y<230)newPage();
   y-=16;sums.forEach(([a,b])=>{txt(a,R-110,y,{align:'right',size:9.5,color:mute});txt(b,R,y,{align:'right',size:9.5});y-=14});
-  hline(y+8,R-230,R,ink,.7);y-=6;txt(storno?'Gutschrift gesamt':'Gesamtsumme',R-110,y,{align:'right',bold:true,size:11});txt(money(+inv.total),R,y,{align:'right',bold:true,size:11});
+  hline(y+8,R-230,R,ink,.7);y-=6;txt(storno?'Gutschrift gesamt':'Gesamtsumme',R-110,y,{align:'right',bold:true,size:11});txt(money(+inv.total),R,y,{align:'right',bold:true,size:11});}
   // Hinweise
   y-=34;
   const notes=[];
-  if(!storno)notes.push(!inv.due_date||inv.due_date===inv.invoice_date?'Bitte überweisen Sie den Gesamtbetrag sofort unter Angabe der Rechnungsnummer '+inv.number+' auf das unten genannte Konto.':'Bitte überweisen Sie den Gesamtbetrag bis zum '+fmtL(inv.due_date)+' unter Angabe der Rechnungsnummer '+inv.number+' auf das unten genannte Konto.');
+  if(mode==='delivery')notes.push('Leistungszeitraum: '+fmtL(inv.period_start)+' – '+fmtL(inv.period_end)+'.');
+  else if(mode==='receipt')notes.push('Wir bestätigen den Eingang Ihrer Zahlung über '+money(+inv.total)+(inv.paid_at?' am '+fmtL(inv.paid_at):'')+' für die Rechnung '+inv.number+'. Vielen Dank!');
+  else if(!storno)notes.push(!inv.due_date||inv.due_date===inv.invoice_date?'Bitte überweisen Sie den Gesamtbetrag sofort unter Angabe der Rechnungsnummer '+inv.number+' auf das unten genannte Konto.':'Bitte überweisen Sie den Gesamtbetrag bis zum '+fmtL(inv.due_date)+' unter Angabe der Rechnungsnummer '+inv.number+' auf das unten genannte Konto.');
   else notes.push('Der Betrag wird mit der stornierten Rechnung verrechnet bzw. erstattet.');
+  if(mode==='invoice'){
   if(inv.lodging_exempt)notes.push('Keine Beherbergungsabgabe: '+(inv.lodging_exempt_note||'befreit nach § 2 Abs. 3 Beherbergungsabgabesatzung Flensburg')+'.');
   if(inv.notes)notes.push(inv.notes);
-  if(!storno&&inv.interest_note)notes.push(inv.interest_note);
+  if(!storno&&inv.interest_note)notes.push(inv.interest_note);}
   notes.forEach(n=>{wrap(n,R-L,9.5).forEach(t=>{if(y<90){foot();page=doc.addPage([W,H]);y=H-60}txt(t,L,y,{size:9.5,color:ink});y-=13});y-=5});
   foot();
   const pages=doc.getPages();if(pages.length>1)pages.forEach((p,ix)=>{const t='Seite '+(ix+1)+' von '+pages.length;p.drawText(t,{x:R-F.widthOfTextAtSize(t,7.2),y:H-30,size:7.2,font:F,color:mute})});
