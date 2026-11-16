@@ -542,6 +542,7 @@ body{background:
         <button data-f="overdue" aria-pressed="false">Überfällig</button>
         <button data-f="paid" aria-pressed="false">Bezahlt</button>
         <button data-f="all" aria-pressed="false">Alle</button>
+        <button data-f="draft" aria-pressed="false" id="rg-draftbtn">Entwürfe</button>
       </div>
       <input class="search" id="rg-q" type="search" placeholder="Kunde, Nummer oder Wohnung">
       <div class="rg-dates" id="rg-dates">
@@ -2053,7 +2054,10 @@ async function loadBilling(){
   customers=c.data;issuers=Object.fromEntries(i.data.map(x=>[x.id,x]));bset=s.data[0]||null;
   const ext=await sb.from('invoices').select('id,due_date,vat,vat_rate,location_text,source,issuer,issuer_snapshot,customer_id,customer_snapshot,lines,lodging_tax,lodging_exempt,lodging_exempt_note,notes,paid_at,sent_at,dunning_level,dunning_at');
   if(!ext.error){const m=Object.fromEntries(ext.data.map(x=>[x.id,x]));invoices=invoices.map(x=>({...x,...(m[x.id]||{})}))}
+  const dr=await sb.from('invoice_drafts').select('*').order('updated_at',{ascending:false});
+  draftsReady=!dr.error;drafts=dr.error?[]:dr.data;
 }
+let drafts=[],draftsReady=false;
 
 /* --- Status --- */
 function invStatus(i){
@@ -2110,6 +2114,9 @@ function renderBilling(){
     }));
     return;
   }
+  const dbtn=$('#rg-draftbtn'),dn=drafts.length;
+  dbtn.textContent='Entwürfe'+(dn?' ('+dn+')':'');dbtn.hidden=!canWrite&&!dn;
+  if(rgFilter==='draft'){renderDrafts(q);return}
   head.replaceChildren(el('tr',{},el('th',{text:'Nr.'}),el('th',{text:'Datum'}),el('th',{text:'Kunde'}),el('th',{text:'Wohnung · Zeitraum'}),el('th',{class:'r',text:'Brutto'}),el('th',{text:'Status'}),el('th',{text:''})));
   let list=invoices.filter(invInScope);
   list=list.filter(i=>{const k=invStatus(i).key;
@@ -2136,6 +2143,45 @@ function renderBilling(){
       el('td',{},el('span',{class:'pill '+st.cls,text:st.label})),
       el('td',{class:'r'},i.file_path?el('button',{class:'btn small',title:'Rechnung als PDF anzeigen',onclick:e=>{e.stopPropagation();showInvoicePdf(i)}},'PDF'):null));
   }));
+}
+function renderDrafts(q){
+  const head=$('#rg-head'),body=$('#rg-body'),note=$('#rg-note');
+  if(!draftsReady){note.append(el('div',{class:'notice',style:'margin-bottom:12px'},el('b',{text:'Entwürfe sind noch nicht eingerichtet. '}),'Bitte einmal „supabase/13_rechnungsentwuerfe.sql“ im Supabase SQL Editor ausführen.'));head.replaceChildren();body.replaceChildren();return}
+  head.replaceChildren(el('tr',{},el('th',{text:'Geändert'}),el('th',{text:'Kunde'}),el('th',{text:'Wohnung · Zeitraum'}),el('th',{class:'r',text:'Brutto'}),el('th',{text:'Status'}),el('th',{text:''})));
+  let list=drafts.slice();
+  if(q)list=list.filter(x=>[x.customer,x.unit_id?unitName(x.unit_id):''].join(' ').toLowerCase().includes(q));
+  note.append(el('div',{class:'rg-sum'},el('span',{text:list.length+' Entw'+(list.length===1?'urf':'ürfe')+' – noch ohne Rechnungsnummer, frei änderbar und löschbar'})));
+  if(!list.length){body.replaceChildren(el('tr',{},el('td',{colspan:'6',class:'empty',text:'Keine Entwürfe. Unter „+ Rechnung“ gibt es „Als Entwurf speichern“.'})));return}
+  body.replaceChildren(...list.map(x=>el('tr',{onclick:()=>openDraft(x.id)},
+    el('td',{class:'num',text:fmt((x.updated_at||'').slice(0,10))}),
+    el('td',{text:x.customer||'—'}),
+    el('td',{},el('div',{text:x.unit_id?unitName(x.unit_id):'—'}),el('div',{class:'s num',text:x.period_start?fmt(x.period_start)+' – '+fmt(x.period_end):''})),
+    el('td',{class:'r num',text:x.total!=null?eur2(+x.total):'—'}),
+    el('td',{},el('span',{class:'pill neutral',text:'Entwurf'})),
+    el('td',{class:'r'},canWrite?el('button',{class:'btn small',onclick:e=>{e.stopPropagation();openDraft(x.id)}},'Bearbeiten'):null))));
+}
+function openDraft(id){
+  if(!canWrite){toast('Nur mit Bearbeitungsrechten möglich.');return}
+  const x=drafts.find(r=>r.id===id);if(!x)return;
+  const data={...x.data};
+  if(data.bookingId&&!bookings.some(b=>b.id===data.bookingId))data.bookingId='';
+  openInvoiceDrawer({draft:data,draftId:x.id});
+}
+async function saveDraft(){
+  const d=invDraft;const c=customers.find(x=>x.id===d.customerId);
+  const data=JSON.parse(JSON.stringify(d));delete data.draftId;
+  let total=null;try{total=calcInvoice(d.lines.filter(l=>l.kind!=='abgabe'),{lodging:lodgingApplies(d.to),exempt:d.exempt}).total}catch(e){}
+  const row={unit_id:d.unitId||null,customer_id:c?.id||null,booking_id:d.bookingId||null,customer:c?custName(c):'',period_start:d.from||null,period_end:d.to||null,total,data,updated_at:new Date().toISOString()};
+  const res=d.draftId?await sb.from('invoice_drafts').update(row).eq('id',d.draftId).select():await sb.from('invoice_drafts').insert(row).select();
+  if(res.error||!res.data?.length){toast(!draftsReady?'Bitte zuerst SQL 13 (Entwürfe) in Supabase ausführen.':'Entwurf konnte nicht gespeichert werden'+(res.error?': '+res.error.message:'.'));return false}
+  const saved=res.data[0];d.draftId=saved.id;
+  const ix=drafts.findIndex(x=>x.id===saved.id);if(ix>=0)drafts[ix]=saved;else drafts.unshift(saved);
+  return true;
+}
+async function deleteDraft(id){
+  const {error}=await sb.from('invoice_drafts').delete().eq('id',id);
+  if(error){toast('Entwurf konnte nicht gelöscht werden.');return false}
+  drafts=drafts.filter(x=>x.id!==id);return true;
 }
 // PDF direkt aus der Liste öffnen (Fenster sofort öffnen, damit der Browser es nicht blockiert)
 async function showInvoicePdf(i){
@@ -2349,7 +2395,7 @@ function openInvoiceDrawer(preset){
   const c=b?matchCustomer(b.company):null;
   invDraft={bookingId:b?.id||'',unitId:b?.unitId||(SU()[0]||UNITS[0]).id,customerId:c?.id||'',from,to,
     depart,lines:defaultLines(b,from,to,depart),payDays:c?c.payment_days:(bset?.default_payment_days??3),exempt:!!c?.lodging_exempt,exemptNote:c?.lodging_exempt_note||'',notes:bset?.standard_note||'',
-    ...(preset.draft||{})};
+    ...(preset.draft||{}),draftId:preset.draftId||preset.draft?.draftId||null};
   drawInvoiceDrawer();
 }
 function drawInvoiceDrawer(){
@@ -2361,7 +2407,7 @@ function drawInvoiceDrawer(){
       .map(x=>el('option',{value:x.id,text:(label==='Wohnung'?'':label+' · ')+(x.company||'Ohne Firma')+' · '+fmt(x.start)+' – '+endTxt(x)+(billing(x).days?' · '+billing(x).days+' N. offen':'')})));
       return opts.length?el('optgroup',{label:bld.name},...opts):null}).filter(Boolean));
   bookingSel.value=d.bookingId;
-  bookingSel.addEventListener('change',()=>{const keep={notes:d.notes};openInvoiceDrawer({bookingId:bookingSel.value||null,draft:bookingSel.value?keep:{bookingId:'',unitId:d.unitId,customerId:d.customerId,from:d.from,to:d.to,lines:d.lines,...keep}})});
+  bookingSel.addEventListener('change',()=>{const keep={notes:d.notes,draftId:d.draftId};openInvoiceDrawer({bookingId:bookingSel.value||null,draft:bookingSel.value?keep:{bookingId:'',unitId:d.unitId,customerId:d.customerId,from:d.from,to:d.to,lines:d.lines,...keep}})});
   const unitSel=el('select',{id:'iv-unit'},allowedBuildings().map(bld=>el('optgroup',{label:bld.name},bld.units.map(([uid,label])=>el('option',{value:uid,text:label})))));
   unitSel.value=d.unitId;unitSel.disabled=!!d.bookingId;unitSel.addEventListener('change',()=>{d.unitId=unitSel.value;upd()});
   const custSel=el('select',{id:'iv-cust'},el('option',{value:'',text:'Kunde wählen …'}),customers.slice().sort((a,c)=>custName(a).localeCompare(custName(c),'de')).map(c=>el('option',{value:c.id,text:custName(c)+(c.city?' · '+c.city:'')})));
@@ -2452,7 +2498,7 @@ function drawInvoiceDrawer(){
   const confirmBox=el('div');
   const prevBtn=el('button',{class:'btn'},'Vorschau');
   prevBtn.addEventListener('click',async()=>{const inv=buildDraftInvoice(true);if(!inv)return;prevBtn.disabled=true;try{openPdfBlob(await buildInvoicePdf(inv))}catch(e){toast('Vorschau ging nicht: '+e.message)}prevBtn.disabled=false});
-  const createBtn=el('button',{class:'btn primary'},'Rechnung erstellen');
+  const createBtn=el('button',{class:'btn primary'},d.draftId?'Fertigstellen':'Rechnung erstellen');
   createBtn.addEventListener('click',()=>{const inv=buildDraftInvoice(false);if(!inv)return;
     confirmBox.replaceChildren(el('div',{class:'confirm',style:'background:var(--accent-soft);color:var(--fg)'},
       el('span',{text:'Rechnung über '+eur2(inv.total)+' an '+inv.customer+' erstellen? Sie bekommt die Nummer '+previewNumber(iss())+' und kann danach nur noch storniert werden.'}),
@@ -2471,8 +2517,14 @@ function drawInvoiceDrawer(){
     el('div',{class:'two'},fld('iv-pay','Zahlungsziel (Tage)',payIn,payHint),el('div')),
     fld('iv-notes','Hinweis auf der Rechnung',notes),
     nextNo,confirmBox);
-  const footer=el('footer',{},el('button',{class:'btn',onclick:closeDrawer},'Abbrechen'),el('span',{class:'grow'}),prevBtn,createBtn);
-  showDrawer('Neue Rechnung',body,footer,true);
+  const draftBtn=el('button',{class:'btn'},d.draftId?'Entwurf speichern':'Als Entwurf speichern');
+  draftBtn.addEventListener('click',async()=>{draftBtn.disabled=true;const ok=await saveDraft();draftBtn.disabled=false;
+    if(ok){toast('Entwurf gespeichert – noch ohne Rechnungsnummer');closeDrawer();view='rg';rgMode='inv';rgFilter='draft';render()}});
+  const delDraft=d.draftId?el('button',{class:'btn danger',onclick:()=>confirmBox.replaceChildren(el('div',{class:'confirm'},el('span',{text:'Entwurf wirklich löschen?'}),
+    el('button',{class:'btn small danger',onclick:async e=>{e.target.disabled=true;if(await deleteDraft(d.draftId)){closeDrawer();toast('Entwurf gelöscht');render()}}},'Löschen'),
+    el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')))},'Entwurf löschen'):null;
+  const footer=el('footer',{},delDraft||el('button',{class:'btn',onclick:closeDrawer},'Abbrechen'),el('span',{class:'grow'}),prevBtn,draftBtn,createBtn);
+  showDrawer(d.draftId?'Entwurf bearbeiten':'Neue Rechnung',body,footer,true);
   upd();
 }
 function previewNumber(iss){if(!iss)return'';const y=+TODAY.slice(0,4);const n=iss.number_year===y?iss.next_no:1;return iss.number_prefix+y+'-'+String(n).padStart(iss.number_digits||3,'0')}
@@ -2504,6 +2556,7 @@ async function createInvoice(inv){
   const {data,error}=await sb.rpc('create_invoice',{p:payload});
   if(error||!data){toast('Rechnung konnte nicht erstellt werden: '+(error?.message||'unbekannter Fehler'));closeDrawer();await loadBookings();return}
   const row=data;
+  if(invDraft?.draftId)await deleteDraft(invDraft.draftId);
   const ok=await storeInvoicePdf(row);
   if(inv.booking_id){const b=bookings.find(x=>x.id===inv.booking_id);
     const lastNight=inv.period_end;
