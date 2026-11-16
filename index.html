@@ -2095,11 +2095,11 @@ const custName=c=>c?(c.kind==='private'?[c.first_name,c.last_name].filter(Boolea
 const locText=uid=>{const u=UNIT[uid];return u?(u.label==='Wohnung'?u.addr:u.addr+' ('+u.label+')'):''};
 
 async function loadBilling(){
-  const [c,i,s]=await Promise.all([sb.from('customers').select('*').order('company_name'),sb.from('issuers').select('*'),sb.from('billing_settings').select('*').eq('id',1)]);
+  const [c,i,s]=await Promise.all([fetchAll(()=>sb.from('customers').select('*').order('company_name').order('id')),sb.from('issuers').select('*'),sb.from('billing_settings').select('*').eq('id',1)]);
   billingReady=!c.error&&!i.error&&!s.error;
   if(!billingReady){customers=[];return}
   customers=c.data;issuers=Object.fromEntries(i.data.map(x=>[x.id,x]));bset=s.data[0]||null;
-  const ext=await sb.from('invoices').select('id,due_date,vat,vat_rate,location_text,source,issuer,issuer_snapshot,customer_id,customer_snapshot,lines,lodging_tax,lodging_exempt,lodging_exempt_note,notes,paid_at,sent_at,dunning_level,dunning_at');
+  const ext=await fetchAll(()=>sb.from('invoices').select('id,due_date,vat,vat_rate,location_text,source,issuer,issuer_snapshot,customer_id,customer_snapshot,lines,lodging_tax,lodging_exempt,lodging_exempt_note,notes,paid_at,sent_at,dunning_level,dunning_at').order('id'));
   if(!ext.error){const m=Object.fromEntries(ext.data.map(x=>[x.id,x]));invoices=invoices.map(x=>({...x,...(m[x.id]||{})}))}
   const dr=await sb.from('invoice_drafts').select('*').order('updated_at',{ascending:false});
   draftsReady=!dr.error;drafts=dr.error?[]:dr.data;
@@ -3141,15 +3141,25 @@ $('#auth-form').addEventListener('submit',async e=>{
 });
 $('#btn-logout').addEventListener('click',async()=>{await sb.auth.signOut()});
 
+// Supabase liefert pro Abfrage höchstens 1000 Zeilen – deshalb seitenweise laden
+async function fetchAll(make){
+  let out=[];
+  for(let from=0;;from+=1000){
+    const r=await make().range(from,from+999);
+    if(r.error)return{data:null,error:r.error};
+    out=out.concat(r.data||[]);
+    if(!r.data||r.data.length<1000)return{data:out,error:null};
+  }
+}
 async function loadBookings(){
   let [{data,error},inv]=await Promise.all([
-    sb.from('bookings').select('*').order('start_date'),
-    sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path,is_storno,cancels').order('invoice_date',{ascending:false})]);
+    fetchAll(()=>sb.from('bookings').select('*').order('start_date').order('id')),
+    fetchAll(()=>sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path,is_storno,cancels').order('invoice_date',{ascending:false}).order('id'))]);
   if(error){toast('Buchungen konnten nicht geladen werden.');return}
-  if(inv.error){inv=await sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path').order('invoice_date',{ascending:false});stornoReady=false}else stornoReady=true;
+  if(inv.error){inv=await fetchAll(()=>sb.from('invoices').select('id,number,invoice_date,customer,unit_id,period_start,period_end,quantity,unit_price,net,total,booking_id,file_path').order('invoice_date',{ascending:false}).order('id'));stornoReady=false}else stornoReady=true;
   invoices=inv.error?[]:inv.data;invoicesReady=!inv.error;
   if(!depReady){const t=await sb.from('bookings').select('departure_confirmed').limit(1);depReady=!t.error}
-  {const pr=await sb.from('invoices').select('id,positions');posReady=!pr.error;
+  {const pr=await fetchAll(()=>sb.from('invoices').select('id,positions').order('id'));posReady=!pr.error;
    if(!pr.error){const m=Object.fromEntries(pr.data.map(r=>[r.id,r.positions]));invoices.forEach(i=>i.positions=m[i.id]||null)}}
   bookings=data.map(fromRow);
   await loadBilling();
