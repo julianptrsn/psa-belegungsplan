@@ -538,10 +538,10 @@ body{background:
         <button data-m="cus" aria-pressed="false">Kunden</button>
       </div>
       <div class="seg" id="rg-seg">
-        <button data-f="open" aria-pressed="true">Offen</button>
-        <button data-f="overdue" aria-pressed="false">Überfällig</button>
+        <button data-f="all" aria-pressed="true">Alle</button>
         <button data-f="paid" aria-pressed="false">Bezahlt</button>
-        <button data-f="all" aria-pressed="false">Alle</button>
+        <button data-f="open" aria-pressed="false">Offen</button>
+        <button data-f="overdue" aria-pressed="false">Überfällig</button>
         <button data-f="draft" aria-pressed="false" id="rg-draftbtn">Entwürfe</button>
       </div>
       <input class="search" id="rg-q" type="search" placeholder="Kunde, Nummer oder Wohnung">
@@ -2034,7 +2034,7 @@ document.addEventListener('drop',e=>{if(!hasFiles(e))return;e.preventDefault();d
 // Rechnungen aus dem Tool bekommen ihre Nummer in der Datenbank (create_invoice) und sind danach unveränderlich.
 // Korrekturen laufen ausschließlich über Stornorechnungen.
 let customers=[], issuers={}, bset=null, billingReady=false;
-let rgMode='inv', rgFilter='open', rgQuery='', rgFrom='', rgTo='';
+let rgMode='inv', rgFilter='all', rgQuery='', rgFrom='', rgTo='';
 const r2=n=>Math.round((+n+Number.EPSILON)*100)/100;
 const fmtL=s=>s?s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4):'';
 const num2=n=>(+n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2196,10 +2196,9 @@ function rgSetRange(v){
   if(r){[rgFrom,rgTo]=r;$('#rg-from').value=rgFrom;$('#rg-to').value=rgTo}
   renderBilling();
 }
-// Mit einem Zeitraum will man meist alle Rechnungen sehen, nicht nur offene
-$('#rg-range').addEventListener('change',e=>{if(e.target.value!=='all'&&rgFilter==='open')rgFilter='all';rgSetRange(e.target.value)});
-$('#rg-from').addEventListener('change',e=>{rgFrom=e.target.value;if(rgFilter==='open')rgFilter='all';$('#rg-range').value='custom';renderBilling()});
-$('#rg-to').addEventListener('change',e=>{rgTo=e.target.value;if(rgFilter==='open')rgFilter='all';$('#rg-range').value='custom';renderBilling()});
+$('#rg-range').addEventListener('change',e=>{rgSetRange(e.target.value)});
+$('#rg-from').addEventListener('change',e=>{rgFrom=e.target.value;$('#rg-range').value='custom';renderBilling()});
+$('#rg-to').addEventListener('change',e=>{rgTo=e.target.value;$('#rg-range').value='custom';renderBilling()});
 document.querySelectorAll('#rg-mode button').forEach(b=>b.addEventListener('click',()=>{rgMode=b.dataset.m;renderBilling()}));
 document.querySelectorAll('#rg-seg button').forEach(b=>b.addEventListener('click',()=>{rgFilter=b.dataset.f;renderBilling()}));
 $('#rg-q').addEventListener('input',e=>{rgQuery=e.target.value;renderBilling()});
