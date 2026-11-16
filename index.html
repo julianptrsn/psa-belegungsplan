@@ -822,7 +822,10 @@ function statWindow(){
   return{from:mStart(11),to:addMonths(mStart(0),1),label:'Letzte 12 Monate'};
 }
 // Rechnungen ohne Wohnung (Reparaturen, Weiterberechnungen) gehören zum Absender
-const invInScope=i=>i.unit_id?inScope(i.unit_id):(!!i.issuer&&allowedOwner(i.issuer)&&(ownerSel==='all'||ownerSel===i.issuer));
+// Sichtbarkeit einer Rechnung: maßgeblich ist der Absender (wer die Rechnung gestellt hat), nicht der Eigentümer der Wohnung.
+// So erscheinen z. B. PSA-Rechnungen an Torben Schmidt auch dann, wenn sie eine Wohnung von Torben betreffen.
+// Rechnungen ohne Absender und ohne bekannte Wohnung werden nicht versteckt, sondern unter „Alle“ gezeigt.
+const invInScope=i=>{const o=i.issuer||UNIT[i.unit_id]?.owner;if(!o)return ownerSel==='all';return allowedOwner(o)&&(ownerSel==='all'||ownerSel===o)};
 const invNet=i=>i.net!=null?+i.net:(i.total!=null&&i.vat!=null?+i.total-+i.vat:0);
 const niceMax=v=>{if(v<=0)return 1;const e=Math.pow(10,Math.floor(Math.log10(v)));const f=v/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e};
 const eurShort=v=>Math.abs(v)>=1000?(Math.round(v/100)/10).toLocaleString('de-DE')+' T€':Math.round(v).toLocaleString('de-DE')+' €';
