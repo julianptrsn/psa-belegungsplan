@@ -883,7 +883,7 @@ function renderStats(){
 // Positionen zusammenfassen: alle Übernachtungs- und alle Reinigungspositionen jeweils als eine Gruppe
 function prodGroup(d,inv){const t=(d||'').trim();
   if(inv&&/st(ö|oe)ver/i.test(inv.customer||''))return'Stöver';
-  if(inv&&!inv.unit_id||/reparatur|defekt|ersatz|schaden/i.test(t))return'Reparaturen';
+  if(inv&&(!inv.unit_id||isOtherInv(inv))||/reparatur|defekt|ersatz|schaden/i.test(t))return'Reparaturen';
   if(/beherbergungsabgabe/i.test(t))return'Beherbergungsabgabe';if(/übernacht|uebernacht/i.test(t))return'Übernachtungen';if(/reinig/i.test(t))return'Reinigungen';return t||'Ohne Bezeichnung'}
 function hbars(box,rows,empty){
   if(!rows.length){box.replaceChildren(el('div',{class:'empty',style:'padding:0',text:empty}));return}
@@ -941,7 +941,7 @@ function renderOverview(){
   $('#ov-free').replaceChildren(...(chips.length?chips:[el('span',{class:'empty',style:'padding:0',text:'Heute ist alles belegt.'})]));
 
   renderOverdue();
-  const orphans=activeInvoices().filter(i=>inScope(i.unit_id)&&(!i.booking_id||!bookings.find(b=>b.id===i.booking_id)));
+  const orphans=activeInvoices().filter(i=>inScope(i.unit_id)&&!isOtherInv(i)&&(!i.booking_id||!bookings.find(b=>b.id===i.booking_id)));
   $('#ov-orphan-panel').hidden=!orphans.length;
   $('#ov-orphan').replaceChildren(...orphans.map(i=>el('li',{tabindex:'0',onclick:()=>openOrphan(i),onkeydown:e=>{if(e.key==='Enter')openOrphan(i)}},
     el('div',{class:'main'},el('div',{class:'t',text:(i.customer||'Kunde unbekannt')+' · Nr. '+i.number}),el('div',{class:'s',text:(UNIT[i.unit_id]?unitName(i.unit_id):'Wohnung unbekannt')+' · '+fmt(i.period_start)+' – '+fmt(i.period_end)})),
@@ -1311,6 +1311,8 @@ function parseInvoice(items,width){
   (p.positions||[]).forEach(x=>{if(x.unitPrice!=null)x.unitPrice=r(x.unitPrice*f);if(x.amount!=null)x.amount=r(x.amount*f)});
   return p;
 }
+// Position: Beschreibung … Menge [Einheit] Einzelpreis € USt. % Betrag €  (mit oder ohne Spalten Datum/Einheit)
+const POS_RE=/^(.*?)\s+(-?[\d.]*\d,\d+)\s+(?:[A-Za-zäöüÄÖÜ²\.]{1,10}\s+)?(-?[\d.]*\d,\d{2})\s*€\s+(\d+(?:,\d+)?)\s*%\s+(-?[\d.]*\d,\d{2})\s*€$/;
 function parseInvoiceRaw(items,width){
   const rows=invoiceLines(items);
   const all=rows.map(r=>r.text).join('\n');
@@ -1339,7 +1341,12 @@ function parseInvoiceRaw(items,width){
   out.groups=[];
   const iTab=rows.findIndex(r=>/Einzelpreis/i.test(r.text));
   const hdr=rows.slice(iHead>=0?iHead+1:0,iTab>0?iTab:(iHead>=0?iHead+8:8));
-  for(const r of hdr){
+  const letterAt=hdr.findIndex(r=>/^(sehr geehrte|hallo|guten tag|liebe)/i.test(r.text.trim()));
+  if(letterAt>=0){
+    const body=[];for(const r of hdr.slice(letterAt+1)){const t=r.text.trim();if(/^mit freundlichen/i.test(t))break;body.push(t)}
+    out.letter=body.join(' ').replace(/\s+/g,' ').trim();
+  }
+  for(const r of (letterAt>=0?hdr.slice(0,letterAt):hdr)){
     const t=r.text.trim();if(!t)continue;
     const m=t.match(/(\d{1,2}\.\d{1,2}\.\d{4})\s*[-–]\s*(\d{1,2}\.\d{1,2}\.\d{4})/);
     if(m){
@@ -1364,6 +1371,11 @@ function parseInvoiceRaw(items,width){
   out.positions=[];let pos=null;
   for(const r of rows.slice(iTab+1)){
     if(/Nettobetrag|Gesamtsumme/i.test(r.text))break;
+    const pm=r.text.replace(/\s+/g,' ').match(POS_RE);
+    if(pm){
+      const desc=pm[1].replace(/^\d+\s+/,'').replace(/\s+\d{1,2}\.\d{1,2}\.\d{4}$/,'').trim();
+      out.positions.push({description:desc,quantity:deNum(pm[2]),unitPrice:deNum(pm[3]),vatRate:deNum(pm[4]),amount:deNum(pm[5])});
+      pos=r;continue}
     const c=r.cells.map(c=>c.text);const vi=c.findIndex(t=>/%/.test(t));
     if(vi<2||!/€/.test(r.text))continue;
     out.positions.push({description:c.slice(0,vi-2).filter(t=>!/^\d+$/.test(t)).join(' '),quantity:deNum(c[vi-2]),unitPrice:deNum(c[vi-1]),vatRate:deNum(c[vi]),amount:deNum(c[c.length-1])});
@@ -1400,10 +1412,14 @@ function loadPdfJs(){
 async function readInvoicePdf(file){
   const lib=await loadPdfJs();
   const doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
-  const page=await doc.getPage(1);const vp=page.getViewport({scale:1});
-  const tc=await page.getTextContent();
-  const items=tc.items.map(i=>({str:i.str,x:i.transform[4],y:i.transform[5],w:i.width}));
-  return fixLigatures(parseInvoice(items,vp.width));
+  // Alle Seiten lesen und untereinander legen (Summen stehen bei langen Rechnungen erst auf Seite 2)
+  let items=[],width=0,off=0;
+  for(let n=1;n<=Math.min(doc.numPages,6);n++){
+    const page=await doc.getPage(n);const vp=page.getViewport({scale:1});width=width||vp.width;
+    const tc=await page.getTextContent();
+    items=items.concat(tc.items.map(i=>({str:i.str,x:i.transform[4],y:i.transform[5]-off,w:i.width})));
+    off+=vp.height+40}
+  return fixLigatures(parseInvoice(items,width));
 }
 // Zervant-PDFs enthalten Ligaturen (fi, fl …), die pdf.js als Nullzeichen liefert – die Datenbank lehnt das ab.
 // Firmennamen werden über den Kundenstamm aufgelöst („Pro\0t“ → „Profit“), sonst wird „fi“ angenommen.
@@ -1436,13 +1452,35 @@ function matchUnit(location){
   const cand=bld.units.filter(([id,label])=>{const k=floorKey(label);const k2=k.replace('rechts','r').replace('links','l');return k===rest||k2===rest||(rest.length>=2&&(k.startsWith(rest)||rest.startsWith(k)))||(rest.length>=4&&k.includes(rest))});
   return cand.length===1?cand[0][0]:(bld.units.length===1?bld.units[0][0]:null);
 }
+// Wohnung aus Fließtext erkennen, z. B. „Wasserschaden in der Amselstraße 2 … betreffen die Wohnung im 2. Obergeschoß“.
+// Nur Etagen, die es in dem Haus wirklich gibt, zählen; bei mehreren Treffern entscheidet „Wohnung im …“, sonst keine Zuordnung.
+function unitFromText(text){
+  const t=String(text||'').replace(/ß/g,'ss').replace(/\s+/g,' ');
+  const bldRe=b=>{const m=b.name.match(/^(.*?)\s+(\d+\s*[a-z]?)$/i);if(!m)return null;
+    const street=m[1].replace(/ß/g,'ss').replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/stra(ss|ß)e$/i,'str(?:asse|\\.)?').replace(/[\s-]+/g,'[\\s-]*');
+    return new RegExp(street+'\\s*'+m[2].replace(/\s+/g,'\\s*')+'(?![0-9])','i')};
+  const blds=BUILDINGS.filter(b=>{const r=bldRe(b);return r&&r.test(t)});
+  if(blds.length!==1)return null;
+  const bld=blds[0];if(bld.units.length===1)return bld.units[0][0];
+  const keysIn=s=>{const k=[];let m;const re=/(\d)\s*\.?\s*(og|obergescho(?:ss|ß)|etage|stock)\b|\b(eg|erdgescho(?:ss|ß))\b|\b(dg|dachgescho(?:ss|ß))\b|\b(ug|untergescho(?:ss|ß)|souterrain)\b|\b(obergescho(?:ss|ß))\b/gi;
+    while((m=re.exec(s.replace(/ß/g,'ss'))))k.push(m[1]?m[1]+'og':m[3]?'eg':m[4]?'dg':m[5]?'ug':'og');
+    const side=/\brechts\b/i.test(s)?'rechts':/\blinks\b/i.test(s)?'links':'';return{k,side}};
+  const pick=s=>{const {k,side}=keysIn(s);return bld.units.filter(([id,label])=>{const u=floorKey(label);
+    return k.some(x=>u===x||(u.startsWith(x)&&(!side||u.endsWith(side))))}).map(u=>u[0])};
+  const near=t.match(/wohnung\s+(?:im|in der|in)\s+[^.;]{0,40}/i);
+  if(near){const c=[...new Set(pick(near[0]))];if(c.length===1)return c[0]}
+  const c=[...new Set(pick(t))];return c.length===1?c[0]:null;
+}
+// Sonstige Rechnung (Reparatur o. Ä.): ohne Buchung und ohne Übernachtungszeitraum
+const isOtherInv=i=>!!i&&!i.booking_id&&i.source!=='tool'&&!!i.period_start&&i.period_start===i.period_end&&
+  !(Array.isArray(i.positions)&&i.positions.some(x=>/übernacht|uebernacht/i.test(x.d||'')));
 // Gelernt: Wie wurde dieselbe Objektangabe bei früheren Rechnungen zugeordnet? (auch manuelle Korrekturen)
 const normLoc=s=>String(s||'').toLowerCase().replace(/ß/g,'ss').replace(/[^a-z0-9äöü]/g,'');
 // Zuerst: dieselbe Objektangabe beim selben Kunden. Sonst: dieselbe Objektangabe, wenn sie bisher immer derselben Wohnung zugeordnet wurde
 // (z. B. „Harrisleer Straße“ ohne Hausnummer kann je nach Kunde 88 oder 90 sein).
 function learnedUnit(location,customer,after){
   const k=normLoc(location);if(!k)return null;
-  const same=invoices.filter(i=>i.unit_id&&UNIT[i.unit_id]&&normLoc(i.location_text)===k&&(!after||(i.period_start||'')>after));
+  const same=invoices.filter(i=>i.unit_id&&UNIT[i.unit_id]&&!isOtherInv(i)&&normLoc(i.location_text)===k&&(!after||(i.period_start||'')>after));
   const top=list=>{const cnt={};list.forEach(i=>cnt[i.unit_id]=(cnt[i.unit_id]||0)+1);const e=Object.entries(cnt).sort((a,c)=>c[1]-a[1]);return e.length?e:null};
   const byCust=customer?top(same.filter(i=>sameCo(i.customer,customer))):null;
   if(byCust)return byCust[0][0];
@@ -1901,14 +1939,17 @@ async function trimStornoBookings(){
 async function saveOtherInvoice(file,p){
   const owner=parsedOwner(p,null)||'PSA Immobilien';
   const date=p.date||TODAY, vr=p.net?Math.round(+p.vat/+p.net*1000)/10:null;
-  const title=(p.location||p.description||'Sonstige Leistung').trim();
+  const tu=unitFromText([p.letter,p.location,p.description].filter(Boolean).join(' '));
+  const unitId=tu&&allowedOwner(UNIT[tu].owner)?tu:null;
+  const title=(unitId?locText(unitId):(p.location||p.description||'Sonstige Leistung')).trim();
   const pos=(p.positions||[]).filter(x=>x.quantity!=null&&x.unitPrice!=null&&x.vatRate!=null&&x.vatRate<=25);
   // Stimmen die Positionen nicht mit dem Netto überein (z. B. negative Mengen im Storno), eine Sammelposition nehmen
   if(pos.length&&Math.abs(pos.reduce((t,x)=>t+x.quantity*x.unitPrice,0)-(+p.net))>0.5)pos.length=0;
   const positions=pos.length?posJson({positions:pos}):[{d:title,q:1,u:+p.net,v:vr}];
-  const row={number:p.number,invoice_date:date,due_date:p.due||null,customer:p.customer||'Unbekannt',unit_id:null,location_text:title,
+  const row={number:p.number,invoice_date:date,due_date:p.due||null,customer:p.customer||'Unbekannt',unit_id:unitId,location_text:title,
     period_start:date,period_end:date,quantity:1,unit_price:+p.net,vat_rate:vr,net:p.net,vat:p.vat,total:p.total,booking_id:null,issuer:owner,
     ...(p.isStorno?{is_storno:true,cancels:p.cancels||null}:{}),
+    ...(p.letter?{notes:p.letter.slice(0,1500)}:{}),
     ...(posReady?{positions}:{})};
   const safe=String(p.number).replace(/[^A-Za-z0-9._-]/g,'_');
   let filePath=date.slice(0,4)+'/'+safe+'.pdf';
