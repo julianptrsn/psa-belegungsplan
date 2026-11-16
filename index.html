@@ -284,6 +284,8 @@ td .s{font-size:12px;color:var(--muted)}
 .drawer .menu[open]{flex-basis:100%}
 .drawer .menu-list{position:static;margin-top:8px;box-shadow:none;min-width:0}
 .rg-dates{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rg-break{flex-basis:100%;height:0}
+#btn-bset:not([hidden]){display:inline-flex;align-items:center;justify-content:center;padding:6px 9px}
 .rg-dates select,.rg-dates input{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:13px}
 .rg-sum{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted);margin:0 0 10px}
 .rg-sum b{color:var(--fg)}
@@ -544,17 +546,18 @@ body{background:
         <button data-f="overdue" aria-pressed="false">Überfällig</button>
         <button data-f="draft" aria-pressed="false" id="rg-draftbtn">Entwürfe</button>
       </div>
+      <span class="grow"></span>
+      <button class="btn small" id="btn-cusimp" hidden>Kunden aus Zervant</button>
+      <input type="file" id="cusimp-file" accept=".csv,text/csv" hidden>
+      <button class="btn small" id="btn-cus" hidden>+ Kunde</button>
+      <button class="btn small primary" id="btn-rnew" hidden>+ Rechnung</button>
+      <button class="btn small" id="btn-bset" hidden title="Einstellungen" aria-label="Einstellungen"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <span class="rg-break"></span>
       <input class="search" id="rg-q" type="search" placeholder="Kunde, Nummer oder Wohnung">
       <div class="rg-dates" id="rg-dates">
         <select id="rg-range" aria-label="Zeitraum"><option value="all">Alle Daten</option><option value="m0">Dieser Monat</option><option value="m1">Letzter Monat</option><option value="y0">Dieses Jahr</option><option value="y1">Letztes Jahr</option><option value="r12">Letzte 12 Monate</option><option value="custom">Eigener Zeitraum</option></select>
         <input type="date" id="rg-from" aria-label="Rechnungsdatum von"><span class="s">–</span><input type="date" id="rg-to" aria-label="Rechnungsdatum bis">
       </div>
-      <span class="grow"></span>
-      <button class="btn small" id="btn-bset" hidden>Einstellungen</button>
-      <button class="btn small" id="btn-cusimp" hidden>Kunden aus Zervant</button>
-      <input type="file" id="cusimp-file" accept=".csv,text/csv" hidden>
-      <button class="btn small" id="btn-cus" hidden>+ Kunde</button>
-      <button class="btn small primary" id="btn-rnew" hidden>+ Rechnung</button>
     </div>
     <div id="rg-note"></div>
     <div class="tbl-wrap"><table id="rg-table"><thead id="rg-head"></thead><tbody id="rg-body"></tbody></table></div>
