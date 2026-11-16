@@ -838,7 +838,7 @@ function renderStats(){
   const w=statWindow();
   const inv=activeInvoices().filter(i=>i.invoice_date&&invInScope(i)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
   // Stornos ohne erfasstes Original zählen negativ mit
-  const loose=invoices.filter(i=>i.is_storno&&!invoices.some(o=>o.number===i.cancels)&&i.invoice_date&&invInScope(i)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
+  const loose=invoices.filter(i=>i.is_storno&&!invoices.some(o=>o.number===i.cancels&&invOwner(o)===invOwner(i))&&i.invoice_date&&invInScope(i)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
   const all=[...inv,...loose];
   const sum=all.reduce((t,i)=>t+invNet(i),0);
   const mFrom=TODAY.slice(0,7)+'-01';
@@ -1565,6 +1565,9 @@ function loadJsZip(){
 }
 // Absender einer gelesenen Rechnung: aus der Wohnung, sonst aus dem Rechnungskopf
 const parsedOwner=(p,unitId)=>unitId?UNIT[unitId].owner:(p&&p.issuer?(sameOwner(p.issuer,'Torben Schmidt')?'Torben Schmidt':'PSA Immobilien'):'');
+// Originalrechnung zu einem Storno: gleiche Nummer beim selben Absender, bei mehreren Treffern die mit demselben Kunden
+const findOriginal=(p,owner)=>{const c=invoices.filter(i=>i.number===p.cancels&&!i.is_storno&&(!owner||invOwner(i)===owner));
+  return c.find(i=>sameCo(i.customer||'',p.customer||''))||c[0]||null};
 const findDup=(p,unitId)=>{const o=parsedOwner(p,unitId);return invoices.find(i=>i.number===p.number&&(!o||invOwner(i)===o))||null};
 // Entscheidet, ob eine Rechnung ohne Rückfrage übernommen werden kann.
 function autoPlan(p){
@@ -1577,7 +1580,7 @@ function autoPlan(p){
   if(!unitId)return{action:'review',reason:'Wohnung „'+(p.location||'?')+'“ nicht erkannt'};
   if(p.isStorno){
     // Wie die Vorauswahl in der Prüfansicht: Buchung der stornierten Rechnung, Zeitraum aus der Belegung nehmen
-    const orig=p.cancels?invoices.find(i=>i.number===p.cancels&&invOwner(i)===UNIT[unitId].owner):null;
+    const orig=p.cancels?findOriginal(p,UNIT[unitId].owner):null;
     if(!old&&!orig)return{action:'review',reason:'Stornorechnung – Originalrechnung '+(p.cancels||'?')+' nicht im Tool'};
     return{action:'storno',st:{unitId,company:p.customer||'',target:orig?.booking_id||'',shorten:!old,del:false},unitId};
   }
@@ -1823,8 +1826,10 @@ function invoicedUntilWithout(bookingId,cancelNo){
 }
 function drawStornoReview(file,p,head,next,unitId){
   const f=(id,lbl,input,hint)=>el('div',{class:'field'},el('label',{for:id,text:lbl}),input,hint||null);
-  const orig=p.cancels?invoices.find(i=>i.number===p.cancels):null;
-  const dup=invoices.find(i=>i.number===p.number);
+  // Rechnungsnummern gibt es bei PSA und bei Torben doppelt: Original nur beim selben Absender suchen
+  const own=parsedOwner(p,unitId);
+  const orig=p.cancels?findOriginal(p,own):null;
+  const dup=findDup(p,unitId);
   const st={unitId:unitId||(orig&&UNIT[orig.unit_id]?orig.unit_id:''),company:p.customer||'',target:'',shorten:true,del:false};
   const summary=el('div',{class:'invsum'},el('div',{class:'h'},el('span',{text:p.customer||'Kunde unbekannt'}),el('span',{class:'num',text:p.total!=null?eur2(p.total):''})),
     el('dl',{},
@@ -1907,7 +1912,8 @@ async function saveStorno(file,p,st){
   let filePath=(p.date||TODAY).slice(0,4)+'/'+safe+'.pdf';
   const up=await sb.storage.from('rechnungen').upload(filePath,file,{contentType:'application/pdf',upsert:false});
   if(up.error){const alt=filePath.replace('.pdf','-'+Date.now()+'.pdf');const up2=await sb.storage.from('rechnungen').upload(alt,file,{contentType:'application/pdf'});filePath=up2.error?null:alt}
-  const {error}=await sb.from('invoices').insert({number:p.number,invoice_date:p.date||null,customer:p.customer,unit_id:st.unitId,location_text:p.location,
+  const issuer=parsedOwner(p,null)||UNIT[st.unitId]?.owner||null;
+  const {error}=await sb.from('invoices').insert({number:p.number,invoice_date:p.date||null,customer:p.customer,unit_id:st.unitId,location_text:p.location,issuer,
     period_start:p.periodStart,period_end:p.periodEnd,quantity:p.quantity,unit_price:p.unitPrice,vat_rate:p.vatRate,net:p.net,vat:p.vat,total:p.total,
     booking_id:bookingId,file_path:filePath,is_storno:true,cancels:p.cancels||null,...(posReady?{positions:posJson(p)}:{})});
   if(error)throw new Error(error.code==='23505'?'Stornorechnung '+p.number+' ist schon erfasst.':'Storno konnte nicht gespeichert werden: '+error.message);
