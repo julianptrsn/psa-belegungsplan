@@ -1692,6 +1692,23 @@ function autoPlan(p){
   if(!(+st.persons>0)){const r=locationRule(p.location,p.periodEnd);st.persons=r?.persons||UNIT[unitId].cap;st.notes=r?.persons?'Personen laut Regel für „'+p.location+'“':'Personen = Bettenzahl (beim Import angenommen)'}
   st.target='new';return{action:'auto',st,unitId,isNew:true};
 }
+// Gleicht eine schon gespeicherte Rechnung mit dem neu gelesenen PDF ab. Gibt eine Beschreibung der
+// Korrektur zurück (oder null, wenn alles stimmt).
+async function fixStoredInvoice(p){
+  if(!p||!p.number||!canWrite)return null;
+  const mu=p.periodStart?unitFromLocation(p.location,p.customer,p.periodEnd):null;
+  const row=findDup(p,mu&&allowedOwner(UNIT[mu].owner)?mu:null);if(!row)return null;
+  const diffs=[],upd={};
+  const money=(k,lbl)=>{if(!(k in row))return;const a=row[k]==null?null:+row[k],b=p[k]==null?null:+p[k];
+    if(b!=null&&(a==null||Math.abs(a-b)>0.005)){upd[k]=b;diffs.push(lbl+' '+(a==null?'—':eur2(a))+' → '+eur2(b))}};
+  money('total','brutto');money('net','netto');money('vat','USt.');
+  if(p.date&&row.invoice_date!==p.date){upd.invoice_date=p.date;diffs.push('Datum '+fmt(row.invoice_date)+' → '+fmt(p.date))}
+  if(!diffs.length)return null;
+  if(posReady&&(p.positions||[]).length)upd.positions=posJson(p);
+  const {data,error}=await sb.from('invoices').update(upd).eq('id',row.id).select('id');
+  if(error||!data?.length)return null;
+  return diffs.join(' · ');
+}
 async function bulkInvoiceImport(files){
   editing={id:null,invoice:true};
   const status=el('p',{class:'ro-note'}),bar=el('div',{class:'meter'},el('i',{style:'width:0%'}));
@@ -1709,7 +1726,7 @@ async function bulkInvoiceImport(files){
   const numKey=n=>String(n||'').replace(/\d+/g,d=>d.padStart(8,'0'));
   items.sort((a,c)=>{const sa=(a.p&&a.p.periodStart)||'9',sc=(c.p&&c.p.periodStart)||'9';
     if(sa!==sc)return sa<sc?-1:1;const na=numKey(a.p&&a.p.number),nc=numKey(c.p&&c.p.number);return na<nc?-1:na>nc?1:0});
-  const res={auto:[],created:[],other:[],skip:[],review:[],fail:[]};
+  const res={auto:[],created:[],other:[],skip:[],review:[],fail:[],fixed:[]};
   for(let i=0;i<items.length;i++){
     const {file,p}=items[i];
     if(stop){res.review.push({file,p,reason:'abgebrochen'});continue}
@@ -1724,6 +1741,10 @@ async function bulkInvoiceImport(files){
     }else if(plan.action==='auto'){
       try{await saveInvoice(file,p,plan.st);(plan.isNew?res.created:res.auto).push({file,p,unitId:plan.unitId})}
       catch(e){res.review.push({file,p,reason:e.message||'Speichern fehlgeschlagen'})}
+    }else if(plan.action==='skip'){
+      // Schon erfasst: Betrag und Datum mit dem PDF vergleichen und Abweichungen korrigieren
+      let fx=null;try{fx=await fixStoredInvoice(p)}catch(e){fx=null}
+      if(fx)res.fixed.push({file,p,reason:fx});else res.skip.push({file,p,reason:plan.reason});
     }else res[plan.action].push({file,p,reason:plan.reason});
   }
   await loadBookings();
@@ -1739,11 +1760,12 @@ async function bulkInvoiceImport(files){
         el('div',{},el('span',{text:'Übernommen, Buchung neu angelegt'}),el('b',{text:String(res.created.length)})),
         res.other.length?el('div',{},el('span',{text:'Sonstige Rechnungen ohne Wohnung (z. B. Reparaturen) abgelegt'}),el('b',{text:String(res.other.length)})):null,
         res.trimmed?el('div',{},el('span',{text:'Buchungen nach Storno gekürzt'}),el('b',{text:String(res.trimmed)})):null,
+        res.fixed.length?el('div',{},el('span',{text:'Schon im Tool – Betrag/Datum korrigiert'}),el('b',{text:String(res.fixed.length)})):null,
         el('div',{},el('span',{text:'Schon im Tool – übersprungen'}),el('b',{text:String(res.skip.length)})),
         el('div',{class:'tot'},el('span',{text:'Bitte selbst prüfen'}),el('b',{text:String(res.review.length)})),
         res.fail.length?el('div',{},el('span',{text:'Nicht lesbar (kein Text im PDF)'}),el('b',{text:String(res.fail.length)})):null),
       block('Bitte prüfen',res.review,x=>x.reason),block('Nicht lesbar',res.fail,()=>'—'),
-      block('Neu angelegte Buchungen',res.created),block('Sonstige Rechnungen',res.other),block('Zugeordnet',res.auto),block('Übersprungen',res.skip,()=>'schon erfasst')),
+      block('Korrigiert',res.fixed,x=>x.reason),block('Neu angelegte Buchungen',res.created),block('Sonstige Rechnungen',res.other),block('Zugeordnet',res.auto),block('Übersprungen',res.skip,()=>'schon erfasst')),
     el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn',onclick:closeDrawer},'Schließen'),reviewBtn)));
 }
 let invAutoMode=false,invAutoCount=0;
