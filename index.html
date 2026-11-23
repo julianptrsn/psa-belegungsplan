@@ -122,6 +122,8 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .st-pop{position:absolute;z-index:12;right:0;top:calc(100% + 8px);width:min(360px,100%);display:grid;gap:12px;padding:16px;border-radius:16px;
   background:rgba(14,40,47,.92);border:1px solid var(--glass-line);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:0 18px 40px rgba(0,0,0,.35)}
 .st-pop-act{display:flex;justify-content:flex-end;gap:8px}
+.st-mode{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+#st-vat{padding:2px;border-radius:9px}#st-vat button{padding:3px 9px;font-size:12px;border-radius:7px}
 @media (max-width:700px){#st-range{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}#st-range button{padding:7px 4px}.st-pop{left:0;right:0;width:auto}}
 .stats-grid{margin-bottom:22px}
 .stats-head h2{margin:0;font-size:17px}
@@ -496,15 +498,15 @@ body{background:
       </div>
     </div>
     <div class="stats-grid">
-      <div class="panel st-sales"><header><h2>Verkäufe <span class="st-period" id="st-period"></span></h2><span>netto, nach Rechnungsdatum</span></header>
+      <div class="panel st-sales"><header><h2>Verkäufe <span class="st-period" id="st-period"></span></h2><span class="st-mode"><span class="seg" id="st-vat" role="group" aria-label="Netto oder Brutto"><button data-m="net" aria-pressed="true">Netto</button><button data-m="gross" aria-pressed="false">Brutto</button></span> nach Rechnungsdatum</span></header>
         <div class="st-figs"><div><div class="lbl" id="st-range-lbl">Letzte 12 Monate</div><div class="big num" id="st-sum">—</div><div class="yoy" id="st-sum-yoy"></div></div>
           <div><div class="lbl">Diesen Monat</div><div class="big num" id="st-month">—</div><div class="yoy" id="st-month-yoy"></div></div>
           <div><div class="lbl">Rechnungen</div><div class="big num" id="st-count">—</div><div class="yoy" id="st-count-yoy"></div></div></div>
         <div class="st-legend" id="st-legend"></div>
         <div class="vchart" id="st-chart"></div>
       </div>
-      <div class="panel"><header><h2>Hauptkunden</h2><span id="st-cust-sub">netto</span></header><div class="hbars" id="st-cust"></div></div>
-      <div class="panel"><header><h2>Hauptprodukte und Dienstleistungen</h2><span>netto</span></header><div class="hbars" id="st-prod"></div><div id="st-prod-note"></div></div>
+      <div class="panel"><header><h2>Hauptkunden</h2><span class="st-mode-lbl">netto</span></header><div class="hbars" id="st-cust"></div></div>
+      <div class="panel"><header><h2>Hauptprodukte und Dienstleistungen</h2><span class="st-mode-lbl">netto</span></header><div class="hbars" id="st-prod"></div><div id="st-prod-note"></div></div>
     </div>
     <div class="ov-grid">
       <div class="panel" id="ov-overdue-panel" hidden style="grid-column:1/-1"><header><h2>Überfällige Rechnungen</h2><span id="ov-overdue-sum"></span></header><ul class="rows" id="ov-overdue"></ul></div>
@@ -864,46 +866,51 @@ function hideTip(){$('#chart-tip').hidden=true}
 function renderStats(){
   document.querySelectorAll('#st-range button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.r===statRange));
   const w=statWindow();
-  const inv=activeInvoices().filter(i=>i.invoice_date&&invInScope(i)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
-  // Stornos ohne erfasstes Original zählen negativ mit
-  const loose=invoices.filter(i=>i.is_storno&&!invoices.some(o=>o.number===i.cancels&&invOwner(o)===invOwner(i))&&i.invoice_date&&invInScope(i)&&i.invoice_date>=w.from&&i.invoice_date<w.to);
-  const all=[...inv,...loose];
-  const sum=all.reduce((t,i)=>t+invNet(i),0);
+  document.querySelectorAll('#st-vat button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===statVat));
+  document.querySelectorAll('.st-mode-lbl').forEach(x=>x.textContent=statVat==='gross'?'brutto':'netto');
+  // Wie in der Buchhaltung (und in Zervant): jede Rechnung und jede Stornorechnung zählt in ihrem
+  // Rechnungsdatum, Stornos mit negativem Betrag.
+  const val=i=>statVat==='gross'?(i.total!=null?+i.total:invNet(i)):invNet(i);
+  const inRange=(i,a,b)=>i.invoice_date&&invInScope(i)&&i.invoice_date>=a&&i.invoice_date<b;
+  const cancelledIn=list=>{const c=new Set(list.filter(i=>i.is_storno&&i.cancels).map(i=>invOwner(i)+'|'+i.cancels));return i=>!i.is_storno&&!c.has(invOwner(i)+'|'+i.number)};
+  const all=invoices.filter(i=>inRange(i,w.from,w.to));
+  const inv=all.filter(cancelledIn(invoices));
+  const sum=all.reduce((t,i)=>t+val(i),0);
   const mFrom=TODAY.slice(0,7)+'-01';
-  const month=activeInvoices().filter(i=>i.invoice_date&&invInScope(i)&&i.invoice_date>=mFrom&&i.invoice_date<=TODAY).reduce((t,i)=>t+invNet(i),0);
+  const month=invoices.filter(i=>inRange(i,mFrom,addDays(TODAY,1))).reduce((t,i)=>t+val(i),0);
   $('#st-range-lbl').textContent=w.label;
   // Vorjahr: derselbe Zeitraum ein Jahr früher, bis zum selben Tag wie heute
   const endD=w.end||TODAY;
   const yb=d=>addMonths(d,-12), pyFrom=yb(w.from), pyTo=addDays(yb(endD),1);
   const cmp=statRange!=='all';
-  const inRange=(i,a,b)=>i.invoice_date&&invInScope(i)&&i.invoice_date>=a&&i.invoice_date<b;
-  const pyInv=cmp?activeInvoices().filter(i=>inRange(i,pyFrom,pyTo)):[];
-  const pyLoose=cmp?invoices.filter(i=>i.is_storno&&!invoices.some(o=>o.number===i.cancels&&invOwner(o)===invOwner(i))&&inRange(i,pyFrom,pyTo)):[];
-  const pyAll=[...pyInv,...pyLoose];
-  const pySum=pyAll.reduce((t,i)=>t+invNet(i),0);
-  const pyMonth=activeInvoices().filter(i=>inRange(i,yb(mFrom),addDays(yb(TODAY),1))).reduce((t,i)=>t+invNet(i),0);
+  const pyAll=cmp?invoices.filter(i=>inRange(i,pyFrom,pyTo)):[];
+  const pyInv=pyAll.filter(cancelledIn(invoices));
+  const pySum=pyAll.reduce((t,i)=>t+val(i),0);
+  const pyMonth=invoices.filter(i=>inRange(i,yb(mFrom),addDays(yb(TODAY),1))).reduce((t,i)=>t+val(i),0);
   const hasPy=cmp&&pyAll.length>0;
   const yoyEl=(box,curV,pyV,fmtV,show)=>{box.replaceChildren();if(!show){return}
     if(!pyV){box.append(document.createTextNode('Vorjahr: '+fmtV(pyV)));return}
     const d=(curV-pyV)/Math.abs(pyV)*100,up=d>=0;
     box.append(document.createTextNode('Vorjahr '+fmtV(pyV)+' · '),el('span',{class:up?'up':'down',text:(up?'▲ +':'▼ ')+d.toLocaleString('de-DE',{maximumFractionDigits:1})+' %'}))};
   yoyEl($('#st-sum-yoy'),sum,pySum,eur,hasPy);
-  const pyMonthHas=activeInvoices().some(i=>inRange(i,yb(mFrom),addDays(yb(TODAY),1)));
+  const pyMonthHas=invoices.some(i=>inRange(i,yb(mFrom),addDays(yb(TODAY),1)));
   yoyEl($('#st-month-yoy'),month,pyMonth,eur,pyMonthHas);
   yoyEl($('#st-count-yoy'),inv.length,pyInv.length,n=>String(n),hasPy);
   if(!cmp)$('#st-sum-yoy').textContent='';
   else if(!hasPy)$('#st-sum-yoy').textContent='Vorjahr: keine Rechnungen erfasst';
-  {const L=d=>d.slice(8,10)+'.'+d.slice(5,7)+'.'+d.slice(0,4);$('#st-period').textContent=L(w.from)+' – '+L(endD)+(endD===TODAY?' (heute)':'')}$('#st-sum').textContent=eur(sum);$('#st-month').textContent=eur(month);$('#st-count').textContent=String(inv.length);
+  {const L=d=>d.slice(8,10)+'.'+d.slice(5,7)+'.'+d.slice(0,4);$('#st-period').textContent=L(w.from)+' – '+L(endD)+(endD===TODAY?' (heute)':'')}$('#st-sum').textContent=eur2(sum);$('#st-month').textContent=eur2(month);$('#st-count').textContent=String(inv.length);
   // Spalten
   const buckets=[];
   if(w.daily){for(let d=w.from;d<w.to;d=addDays(d,1))buckets.push({key:d,label:String(+d.slice(8)),long:fmt(d),v:0,n:0})}
   else{for(let d=w.from.slice(0,7)+'-01';d<w.to;d=addMonths(d,1))buckets.push({key:d.slice(0,7),label:MONTHS[+d.slice(5,7)-1]+(buckets.length===0||d.slice(5,7)==='01'?' '+d.slice(2,4):''),long:MONTHS[+d.slice(5,7)-1]+' '+d.slice(0,4),v:0,n:0})}
   const idx=Object.fromEntries(buckets.map((b,i)=>[b.key,i]));
-  all.forEach(i=>{const k=w.daily?i.invoice_date:i.invoice_date.slice(0,7);const b=buckets[idx[k]];if(b){b.v+=invNet(i);b.n+=i.is_storno?0:1}});
+  all.forEach(i=>{const k=w.daily?i.invoice_date:i.invoice_date.slice(0,7);const b=buckets[idx[k]];if(b){b.v+=val(i);b.n+=i.is_storno?0:1}});
   buckets.forEach(b=>{b.pv=0;b.pn=0});
-  pyAll.forEach(i=>{const d=addMonths(i.invoice_date,12);const k=w.daily?d:d.slice(0,7);const b=buckets[idx[k]];if(b){b.pv+=invNet(i);b.pn+=i.is_storno?0:1}});
+  pyAll.forEach(i=>{const d=addMonths(i.invoice_date,12);const k=w.daily?d:d.slice(0,7);const b=buckets[idx[k]];if(b){b.pv+=val(i);b.pn+=i.is_storno?0:1}});
   const L4=d=>d.slice(0,4);
-  $('#st-legend').replaceChildren(...(hasPy?[el('span',{},el('i',{style:'background:var(--accent)'}),L4(TODAY)),el('span',{},el('i',{style:'background:rgba(255,255,255,.16);box-shadow:inset 0 2px 0 rgba(255,255,255,.45)'}),'Vorjahr '+(+L4(TODAY)-1))]:[]));
+  const oneYear=L4(w.from)===L4(endD);
+  const curLbl=oneYear?L4(endD):'Zeitraum', pyLbl=oneYear?'Vorjahr '+(+L4(endD)-1):'Vorjahreszeitraum';
+  $('#st-legend').replaceChildren(...(hasPy?[el('span',{},el('i',{style:'background:var(--accent)'}),curLbl),el('span',{},el('i',{style:'background:rgba(255,255,255,.16);box-shadow:inset 0 2px 0 rgba(255,255,255,.45)'}),pyLbl)]:[]));
   $('#st-legend').hidden=!hasPy;
   const top=Math.max(0,...buckets.map(b=>Math.max(b.v,hasPy?b.pv:0)));
   const stepV=niceMax(Math.max(top,1)/4), max=Math.max(stepV,Math.ceil(top/stepV)*stepV);
@@ -926,12 +933,12 @@ function renderStats(){
   // x-Achsen-Beschriftungen liegen absolut im Diagramm
   chart.querySelectorAll('.xl').forEach(x=>chart.append(x));
   // Hauptkunden
-  const byCust={};all.forEach(i=>{const k=(i.customer||'Unbekannt').trim();byCust[k]=(byCust[k]||0)+invNet(i)});
+  const byCust={};all.forEach(i=>{const k=(i.customer||'Unbekannt').trim();byCust[k]=(byCust[k]||0)+val(i)});
   hbars($('#st-cust'),Object.entries(byCust).sort((a,c)=>c[1]-a[1]).slice(0,5),'Noch keine Rechnungen in diesem Zeitraum.');
   // Produkte aus Rechnungspositionen
   const byProd={};let missing=0;
   all.forEach(i=>{if(!Array.isArray(i.positions)||!i.positions.length){missing++;return}
-    i.positions.forEach(x=>{const k=prodGroup(x.d,i);const v=(x.q!=null&&x.u!=null)?x.q*x.u:0;byProd[k]=(byProd[k]||0)+v})});
+    i.positions.forEach(x=>{const k=prodGroup(x.d,i);const v=(x.q!=null&&x.u!=null)?x.q*x.u*(statVat==='gross'?1+(+x.v||0)/100:1):0;byProd[k]=(byProd[k]||0)+v})});
   hbars($('#st-prod'),Object.entries(byProd).sort((a,c)=>c[1]-a[1]).slice(0,5),posReady?'Noch keine Positionsdaten in diesem Zeitraum.':'Für Produkte fehlt noch ein Datenbank-Schritt (SQL 08).');
   const note=$('#st-prod-note');note.replaceChildren();
   if(posReady&&missing){note.append(el('span',{text:missing+' Rechnung'+(missing===1?'':'en')+' ohne Positionsdaten.'}));
@@ -1298,6 +1305,7 @@ window.addEventListener('resize',syncHead);
 document.querySelectorAll('#st-range button').forEach(b=>b.addEventListener('click',()=>{
   if(b.dataset.r==='custom'){openStatPop();return}
   closeStatPop();statRange=b.dataset.r;try{localStorage.setItem('mafl-stat',statRange)}catch(e){}renderStats()}));
+document.querySelectorAll('#st-vat button').forEach(b=>b.addEventListener('click',()=>{statVat=b.dataset.m;try{localStorage.setItem('mafl-stat-vat',statVat)}catch(e){}renderStats()}));
 function openStatPop(){
   const pop=$('#st-pop');if(!pop.hidden){closeStatPop();return}
   const w=statWindow();$('#st-from').value=statRange==='custom'?statFrom:w.from;$('#st-to').value=statRange==='custom'?statTo:(w.end||TODAY);
@@ -1478,7 +1486,8 @@ function parseInvoiceRaw(items,width){
 
 /* ===== Rechnungen: PDF lesen ===== */
 let invoices=[], invoicesReady=false, stornoReady=false, depReady=false, posReady=false;
-let statRange='12m',statFrom='',statTo='';
+let statRange='12m',statFrom='',statTo='',statVat='net';
+try{if(localStorage.getItem('mafl-stat-vat')==='gross')statVat='gross'}catch(e){}
 try{const r=localStorage.getItem('mafl-stat');if(['12m','6m','30d','ytd','all','custom'].includes(r))statRange=r;
   statFrom=localStorage.getItem('mafl-stat-from')||'';statTo=localStorage.getItem('mafl-stat-to')||'';}catch(e){}
 if(statRange==='custom'&&!(statFrom&&statTo))statRange='12m';
