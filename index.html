@@ -625,6 +625,9 @@ const FAR='9999-12-31';
 // Belegt bis zum spätesten Datum aus Abreise/Verlängerung, bezahlter Rechnung und bestätigtem Auszug:
 // Ein bezahlter Zeitraum bleibt belegt, auch wenn die Monteure früher ausziehen.
 // Ist der Auszug bestätigt, ersetzt er geplante Abreise/Verlängerung (auch wenn die später lagen).
+// „Verlängert bis“ ist kein eigenes Datum: Es ist immer das Ende der letzten Rechnung („abgerechnet bis“),
+// sobald dieses nach der ursprünglichen Abreise liegt. Sonst gibt es keine Verlängerung.
+const deriveExt=d=>d.endOriginal&&d.invoicedUntil&&d.invoicedUntil>d.endOriginal?d.invoicedUntil:'';
 const lastDay=b=>[b.departureConfirmed||b.extendedUntil||b.endOriginal,b.invoicedUntil].filter(Boolean).sort().pop()||'';
 const endOf=b=>{const e=lastDay(b);return e?addDays(e,1):FAR};
 const endTxt=b=>lastDay(b)?fmt(lastDay(b)):'offen';
@@ -1104,6 +1107,7 @@ async function drawDrawer(){
   const endHint=el('div',{class:'hint'});
   const calc=el('div',{class:'calc'});
   const invInput=inp('f-inv','invoicedUntil','date');
+  const extInput=el('input',{id:'f-ext',type:'date',value:''});extInput.disabled=true;
   const quick=el('div',{class:'quick'});
   if(!ro){
     const setInv=v=>{d.invoicedUntil=v;invInput.value=v;updateCalc()};
@@ -1116,6 +1120,7 @@ async function drawDrawer(){
     const u=UNIT[d.unitId];const p=+d.persons||0;
     persHint.className='hint'+(u&&p>u.cap?' bad':'');
     persHint.textContent=u?(p>u.cap?'Mehr Personen als Betten ('+u.cap+')!':u.cap+' Betten in dieser Wohnung'):'';
+    d.extendedUntil=deriveExt(d);extInput.value=d.extendedUntil;
     const e=endOf(d);
     endHint.textContent=d.endOriginal&&d.start&&d.endOriginal<d.start?'Die Abreise darf nicht vor der Anreise liegen.':(e!==FAR&&d.start?diff(d.start,e)+' Nächte'+(d.extendedUntil?' inkl. Verlängerung':''):'Leer lassen, wenn das Ende noch offen ist.');
     endHint.className='hint'+(d.endOriginal&&d.endOriginal<d.start?' bad':'');
@@ -1156,7 +1161,7 @@ async function drawDrawer(){
       f('f-contact','Ansprechpartner / Telefon',inp('f-contact','contact','text',{placeholder:'Name, Telefon oder E-Mail'})),
       el('div',{class:'two'},f('f-persons','Personen',inp('f-persons','persons','number',{min:'1',step:'1',inputmode:'numeric'}),persHint),f('f-state','Status',stateSel)),
       el('div',{class:'two'},f('f-start','Anreise',inp('f-start','start','date')),f('f-end','Abreise (letzter Tag)',inp('f-end','endOriginal','date'))),
-      f('f-ext','Verlängert bis (letzter Tag)',inp('f-ext','extendedUntil','date'),endHint),
+      f('f-ext','Verlängert bis (= Rechnung geschrieben bis)',extInput,el('div',{},el('div',{class:'hint',text:'Wird automatisch aus der letzten Rechnung übernommen, sobald sie über die Abreise hinausgeht.'}),endHint)),
       depReady?f('f-dep','Bestätigte Abreise (Auszug)',inp('f-dep','departureConfirmed','date'),el('div',{class:'hint',text:'Nur eintragen, wenn der Auszug fest zugesagt ist. Die Buchung erscheint dann unter „Bestätigte Abreisen“, und der Auszug wird im Plan markiert. Bereits abgerechnete Tage bleiben belegt.'})):null,
       el('div',{class:'two'},f('f-price','Preis',inp('f-price','price','number',{min:'0',step:'0.5',inputmode:'decimal',placeholder:'z. B. 25'})),f('f-model','Preis gilt',modelSel)),
       f('f-inv','Rechnung geschrieben bis (einschließlich)',invInput,quick),
@@ -1180,17 +1185,16 @@ function validate(d){
   if(!(+d.persons>0))return'Bitte die Anzahl Personen eintragen.';
   if(!d.start)return'Bitte das Anreisedatum eintragen.';
   if(d.endOriginal&&d.endOriginal<d.start)return'Die Abreise darf nicht vor der Anreise liegen.';
-  if(d.extendedUntil&&d.extendedUntil<d.start)return'„Verlängert bis“ darf nicht vor der Anreise liegen.';
   if(d.departureConfirmed&&d.departureConfirmed<d.start)return'Die bestätigte Abreise darf nicht vor der Anreise liegen.';
   return null;
 }
 /* ===== Speichern (Supabase) ===== */
 const toRow=d=>({unit_id:d.unitId,company:d.company.trim(),contact:(d.contact||'').trim(),persons:+d.persons,start_date:d.start,
-  end_original:d.endOriginal||null,extended_until:d.extendedUntil||null,price:d.price===''||d.price==null?null:+d.price,
+  end_original:d.endOriginal||null,extended_until:deriveExt(d)||null,price:d.price===''||d.price==null?null:+d.price,
   price_model:d.priceModel||'pp_night',invoiced_until:d.invoicedUntil||null,state:d.state||'confirmed',notes:d.notes||'',
   ...(depReady?{departure_confirmed:d.departureConfirmed||null}:{})});
 const fromRow=r=>({id:r.id,unitId:r.unit_id,company:r.company||'',contact:r.contact||'',persons:r.persons,start:r.start_date,
-  endOriginal:r.end_original||'',extendedUntil:r.extended_until||'',price:r.price==null?'':+r.price,priceModel:r.price_model,
+  endOriginal:r.end_original||'',extendedUntil:deriveExt({endOriginal:r.end_original,invoicedUntil:r.invoiced_until}),price:r.price==null?'':+r.price,priceModel:r.price_model,
   invoicedUntil:r.invoiced_until||'',departureConfirmed:r.departure_confirmed||'',state:r.state,notes:r.notes||'',updatedAt:r.updated_at,updatedBy:r.updated_by,createdAt:r.created_at,createdBy:r.created_by});
 
 async function saveBooking(btn){
