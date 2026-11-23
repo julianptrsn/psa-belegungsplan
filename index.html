@@ -357,8 +357,6 @@ body{background:
 .nav-item[aria-selected="true"] svg{color:var(--gold)}
 .side-act .btn.primary{width:100%;justify-content:flex-start;gap:12px;padding:11px 12px;border-radius:12px;margin-bottom:4px}
 .side-act .btn.primary svg{width:19px;height:19px}
-.install-steps{margin:8px 0 0;padding-left:0;list-style:none;display:grid;gap:10px;line-height:1.45}.install-steps li{padding:10px 12px;border:1px solid var(--glass-line,rgba(255,255,255,.12));border-radius:12px;background:rgba(255,255,255,.04)}
-#btn-install{margin:6px 4px 0}
 .side .owner-sel{margin:0 4px;width:calc(100% - 8px);background:rgba(255,255,255,.06);border:1px solid var(--glass-line);color:var(--fg);border-radius:12px;padding:9px 10px}
 .side .owner-sel option{background:var(--solid);color:var(--fg)}
 .side-foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px 6px 2px;border-top:1px solid var(--line-soft)}
@@ -470,7 +468,6 @@ body{background:
   </div>
   <div class="side-lbl">Wohnungen</div>
   <select id="owner-sel" class="owner-sel" aria-label="Eigentümer"><option value="all">Alle Wohnungen</option><option>PSA Immobilien</option><option>Torben Schmidt</option></select>
-  <button class="nav-item" id="btn-install" hidden title="Das Dashboard als App auf diesem Gerät installieren"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span>App installieren</span></button>
   <div class="side-foot">
     <span class="avatar" id="user-ini">·</span><div class="who"><b id="user-name"></b><small>angemeldet</small></div>
     <button class="iconbtn" id="btn-logout" aria-label="Abmelden" title="Abmelden"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H4V3h5M16 17l5-5-5-5M21 12H9"/></svg></button>
@@ -3221,29 +3218,6 @@ function openPdfBlob(bytes){const url=URL.createObjectURL(new Blob([bytes],{type
 
 /* ===== App-Installation (Startbildschirm) ===== */
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
-/* ===== Als App installieren ===== */
-let installEvt=null;
-const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-function updateInstallBtn(){$('#btn-install').hidden=isStandalone()}
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;updateInstallBtn()});
-window.addEventListener('appinstalled',()=>{installEvt=null;updateInstallBtn();toast('App installiert')});
-function installHelp(){
-  const ios=isIOS(),step=(n,t)=>el('li',{},el('b',{text:n+'. '}),t);
-  const steps=ios?[step(1,'Diese Seite in Safari öffnen.'),step(2,'Unten auf „Teilen“ tippen (Quadrat mit Pfeil nach oben).'),step(3,'„Zum Home-Bildschirm“ wählen und „Hinzufügen“ tippen.')]
-    :/android/i.test(navigator.userAgent)?[step(1,'Diese Seite in Chrome öffnen.'),step(2,'Oben rechts auf ⋮ tippen.'),step(3,'„App installieren“ oder „Zum Startbildschirm hinzufügen“ wählen.')]
-    :[step(1,'Diese Seite in Chrome oder Edge öffnen.'),step(2,'In der Adressleiste rechts auf das Installieren-Symbol klicken (Bildschirm mit Pfeil).'),step(3,'„Installieren“ bestätigen. Am Mac in Safari: Ablage → „Zum Dock hinzufügen“.')];
-  $('#drawer-root').replaceChildren(el('div',{class:'scrim',onclick:closeDrawer}),el('div',{class:'drawer',role:'dialog','aria-modal':'true','aria-labelledby':'d-title'},
-    el('header',{},el('h2',{id:'d-title',text:'Als App installieren'})),
-    el('div',{class:'body'},el('p',{class:'ro-note',text:'Danach startet das Dashboard wie eine eigene App mit dem PSA-Symbol, ohne Browserleiste.'}),el('ol',{class:'install-steps'},...steps)),
-    el('footer',{},el('span',{class:'grow'}),el('button',{class:'btn primary',onclick:closeDrawer},'Verstanden'))));
-}
-$('#btn-install').addEventListener('click',async()=>{
-  setNav(false);
-  if(installEvt){installEvt.prompt();const r=await installEvt.userChoice.catch(()=>null);installEvt=null;if(r&&r.outcome==='accepted')toast('App wird installiert');return}
-  installHelp();
-});
-updateInstallBtn();
 
 
 /* ===== Login & Start ===== */
