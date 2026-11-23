@@ -121,6 +121,9 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .stats-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px}
 .stats-grid{margin-bottom:22px}
 .stats-head h2{margin:0;font-size:17px}
+.st-period{font-size:13px;font-weight:500;color:var(--muted);margin-left:8px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.st-sales header{flex-wrap:wrap;row-gap:2px}
+@media (max-width:600px){.st-period{display:block;margin:2px 0 0}}
 .stats-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px}
 .stats-grid .st-sales{grid-row:span 2;display:flex;flex-direction:column}
 .stats-grid .st-sales .vchart{flex:1;height:auto;min-height:240px}
@@ -474,7 +477,7 @@ body{background:
       </div>
     </div>
     <div class="stats-grid">
-      <div class="panel st-sales"><header><h2>Verkäufe</h2><span>netto, nach Rechnungsdatum</span></header>
+      <div class="panel st-sales"><header><h2>Verkäufe <span class="st-period" id="st-period"></span></h2><span>netto, nach Rechnungsdatum</span></header>
         <div class="st-figs"><div><div class="lbl" id="st-range-lbl">Letzte 12 Monate</div><div class="big num" id="st-sum">—</div></div>
           <div><div class="lbl">Diesen Monat</div><div class="big num" id="st-month">—</div></div>
           <div><div class="lbl">Rechnungen</div><div class="big num" id="st-count">—</div></div></div>
@@ -846,7 +849,8 @@ function renderStats(){
   const sum=all.reduce((t,i)=>t+invNet(i),0);
   const mFrom=TODAY.slice(0,7)+'-01';
   const month=activeInvoices().filter(i=>i.invoice_date&&invInScope(i)&&i.invoice_date>=mFrom&&i.invoice_date<=TODAY).reduce((t,i)=>t+invNet(i),0);
-  $('#st-range-lbl').textContent=w.label;$('#st-sum').textContent=eur(sum);$('#st-month').textContent=eur(month);$('#st-count').textContent=String(inv.length);
+  $('#st-range-lbl').textContent=w.label;
+  {const L=d=>d.slice(8,10)+'.'+d.slice(5,7)+'.'+d.slice(0,4);$('#st-period').textContent=L(w.from)+' – '+L(TODAY)+' (heute)'}$('#st-sum').textContent=eur(sum);$('#st-month').textContent=eur(month);$('#st-count').textContent=String(inv.length);
   // Spalten
   const buckets=[];
   if(w.daily){for(let d=w.from;d<w.to;d=addDays(d,1))buckets.push({key:d,label:String(+d.slice(8)),long:fmt(d),v:0,n:0})}
