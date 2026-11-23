@@ -131,6 +131,14 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .st-figs{display:flex;flex-wrap:wrap;gap:12px 36px;padding:14px 16px 0}
 .st-figs .lbl{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .st-figs .big{font-size:24px;margin-top:2px;letter-spacing:-.02em}
+.yoy{font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.yoy .up{color:var(--ok);font-weight:650}.yoy .down{color:var(--bad);font-weight:650}
+.st-legend{display:flex;gap:16px;padding:12px 16px 0;font-size:12px;color:var(--muted)}
+.st-legend span{display:inline-flex;align-items:center;gap:6px}
+.st-legend i{display:inline-block;width:12px;height:12px;border-radius:3px}
+.vchart .bar2.py{background:rgba(255,255,255,.16);box-shadow:inset 0 2px 0 rgba(255,255,255,.45)}
+.vchart.cmp .bar2{left:auto;right:12%;width:36%}
+.vchart.cmp .bar2.py{left:12%;right:auto;width:36%}
 .vchart{position:relative;height:240px;margin:14px 16px 12px 56px}
 .vchart .grid{position:absolute;inset:0 0 22px 0}
 .vchart .gl{position:absolute;left:0;right:0;border-top:1px solid var(--line-soft)}
@@ -478,9 +486,10 @@ body{background:
     </div>
     <div class="stats-grid">
       <div class="panel st-sales"><header><h2>Verkäufe <span class="st-period" id="st-period"></span></h2><span>netto, nach Rechnungsdatum</span></header>
-        <div class="st-figs"><div><div class="lbl" id="st-range-lbl">Letzte 12 Monate</div><div class="big num" id="st-sum">—</div></div>
-          <div><div class="lbl">Diesen Monat</div><div class="big num" id="st-month">—</div></div>
-          <div><div class="lbl">Rechnungen</div><div class="big num" id="st-count">—</div></div></div>
+        <div class="st-figs"><div><div class="lbl" id="st-range-lbl">Letzte 12 Monate</div><div class="big num" id="st-sum">—</div><div class="yoy" id="st-sum-yoy"></div></div>
+          <div><div class="lbl">Diesen Monat</div><div class="big num" id="st-month">—</div><div class="yoy" id="st-month-yoy"></div></div>
+          <div><div class="lbl">Rechnungen</div><div class="big num" id="st-count">—</div><div class="yoy" id="st-count-yoy"></div></div></div>
+        <div class="st-legend" id="st-legend"></div>
         <div class="vchart" id="st-chart"></div>
       </div>
       <div class="panel"><header><h2>Hauptkunden</h2><span id="st-cust-sub">netto</span></header><div class="hbars" id="st-cust"></div></div>
@@ -850,6 +859,26 @@ function renderStats(){
   const mFrom=TODAY.slice(0,7)+'-01';
   const month=activeInvoices().filter(i=>i.invoice_date&&invInScope(i)&&i.invoice_date>=mFrom&&i.invoice_date<=TODAY).reduce((t,i)=>t+invNet(i),0);
   $('#st-range-lbl').textContent=w.label;
+  // Vorjahr: derselbe Zeitraum ein Jahr früher, bis zum selben Tag wie heute
+  const yb=d=>addMonths(d,-12), pyFrom=yb(w.from), pyTo=addDays(yb(TODAY),1);
+  const cmp=statRange!=='all';
+  const inRange=(i,a,b)=>i.invoice_date&&invInScope(i)&&i.invoice_date>=a&&i.invoice_date<b;
+  const pyInv=cmp?activeInvoices().filter(i=>inRange(i,pyFrom,pyTo)):[];
+  const pyLoose=cmp?invoices.filter(i=>i.is_storno&&!invoices.some(o=>o.number===i.cancels&&invOwner(o)===invOwner(i))&&inRange(i,pyFrom,pyTo)):[];
+  const pyAll=[...pyInv,...pyLoose];
+  const pySum=pyAll.reduce((t,i)=>t+invNet(i),0);
+  const pyMonth=activeInvoices().filter(i=>inRange(i,yb(mFrom),addDays(yb(TODAY),1))).reduce((t,i)=>t+invNet(i),0);
+  const hasPy=cmp&&pyAll.length>0;
+  const yoyEl=(box,curV,pyV,fmtV,show)=>{box.replaceChildren();if(!show){return}
+    if(!pyV){box.append(document.createTextNode('Vorjahr: '+fmtV(pyV)));return}
+    const d=(curV-pyV)/Math.abs(pyV)*100,up=d>=0;
+    box.append(document.createTextNode('Vorjahr '+fmtV(pyV)+' · '),el('span',{class:up?'up':'down',text:(up?'▲ +':'▼ ')+d.toLocaleString('de-DE',{maximumFractionDigits:1})+' %'}))};
+  yoyEl($('#st-sum-yoy'),sum,pySum,eur,hasPy);
+  const pyMonthHas=activeInvoices().some(i=>inRange(i,yb(mFrom),addDays(yb(TODAY),1)));
+  yoyEl($('#st-month-yoy'),month,pyMonth,eur,pyMonthHas);
+  yoyEl($('#st-count-yoy'),inv.length,pyInv.length,n=>String(n),hasPy);
+  if(!cmp)$('#st-sum-yoy').textContent='';
+  else if(!hasPy)$('#st-sum-yoy').textContent='Vorjahr: keine Rechnungen erfasst';
   {const L=d=>d.slice(8,10)+'.'+d.slice(5,7)+'.'+d.slice(0,4);$('#st-period').textContent=L(w.from)+' – '+L(TODAY)+' (heute)'}$('#st-sum').textContent=eur(sum);$('#st-month').textContent=eur(month);$('#st-count').textContent=String(inv.length);
   // Spalten
   const buckets=[];
@@ -857,19 +886,26 @@ function renderStats(){
   else{for(let d=w.from;d<w.to;d=addMonths(d,1))buckets.push({key:d.slice(0,7),label:MONTHS[+d.slice(5,7)-1]+(buckets.length===0||d.slice(5,7)==='01'?' '+d.slice(2,4):''),long:MONTHS[+d.slice(5,7)-1]+' '+d.slice(0,4),v:0,n:0})}
   const idx=Object.fromEntries(buckets.map((b,i)=>[b.key,i]));
   all.forEach(i=>{const k=w.daily?i.invoice_date:i.invoice_date.slice(0,7);const b=buckets[idx[k]];if(b){b.v+=invNet(i);b.n+=i.is_storno?0:1}});
-  const top=Math.max(0,...buckets.map(b=>b.v));
+  buckets.forEach(b=>{b.pv=0;b.pn=0});
+  pyAll.forEach(i=>{const d=addMonths(i.invoice_date,12);const k=w.daily?d:d.slice(0,7);const b=buckets[idx[k]];if(b){b.pv+=invNet(i);b.pn+=i.is_storno?0:1}});
+  const L4=d=>d.slice(0,4);
+  $('#st-legend').replaceChildren(...(hasPy?[el('span',{},el('i',{style:'background:var(--accent)'}),L4(TODAY)),el('span',{},el('i',{style:'background:rgba(255,255,255,.16);box-shadow:inset 0 2px 0 rgba(255,255,255,.45)'}),'Vorjahr '+(+L4(TODAY)-1))]:[]));
+  $('#st-legend').hidden=!hasPy;
+  const top=Math.max(0,...buckets.map(b=>Math.max(b.v,hasPy?b.pv:0)));
   const stepV=niceMax(Math.max(top,1)/4), max=Math.max(stepV,Math.ceil(top/stepV)*stepV);
   const ticks=[];for(let t=0;t<=max+1e-6;t+=stepV)ticks.push(t);
   const step=w.daily?5:buckets.length>36?6:buckets.length>18?3:buckets.length>8?2:1;
-  const chart=$('#st-chart');
+  const chart=$('#st-chart');chart.classList.toggle('cmp',hasPy);
   chart.replaceChildren(
     el('div',{class:'grid'},ticks.map(t=>el('div',{class:'gl'+(t===0?' zero':''),style:'bottom:'+(t/max*100)+'%'},el('span',{text:eurShort(t)})))),
     el('div',{class:'cols'},buckets.map((b,i)=>{
       const cur=w.daily?b.key===TODAY:b.key===TODAY.slice(0,7);
       const col=el('div',{class:'col'+(cur?' cur':''),tabindex:'0','aria-label':b.long+': '+eur(b.v)},
-        el('div',{class:'plot'},el('div',{class:'bar2',style:'height:'+Math.max(0,b.v/max*100)+'%'})),
+        el('div',{class:'plot'},hasPy?el('div',{class:'bar2 py',style:'height:'+Math.max(0,b.pv/max*100)+'%'}):null,el('div',{class:'bar2',style:'height:'+Math.max(0,b.v/max*100)+'%'})),
         (i%step===0||i===buckets.length-1&&!w.daily)?el('div',{class:'xl',style:'left:'+((i+.5)/buckets.length*100)+'%',text:b.label}):null);
-      const tip=e=>showTip(e,[el('div',{text:b.long+(cur?' (laufend)':'')}),el('b',{text:eur2(b.v)}),el('div',{text:b.n+' Rechnung'+(b.n===1?'':'en')})]);
+      const pyTxt=()=>{if(!hasPy)return null;const d=b.pv?(b.v-b.pv)/Math.abs(b.pv)*100:null;
+        return el('div',{text:'Vorjahr: '+eur2(b.pv)+(d==null?'':' ('+(d>=0?'+':'')+d.toLocaleString('de-DE',{maximumFractionDigits:1})+' %)')+(cur&&!w.daily?' bis '+fmt(yb(TODAY)):'')})};
+      const tip=e=>showTip(e,[el('div',{text:b.long+(cur?' (laufend)':'')}),el('b',{text:eur2(b.v)}),el('div',{text:b.n+' Rechnung'+(b.n===1?'':'en')}),pyTxt()].filter(Boolean));
       col.addEventListener('mouseenter',tip);col.addEventListener('focus',tip);col.addEventListener('mouseleave',hideTip);col.addEventListener('blur',hideTip);
       return col;
     })));
