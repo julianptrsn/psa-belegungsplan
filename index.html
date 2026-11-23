@@ -134,6 +134,15 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .stats-grid .st-sales{grid-row:span 2;display:flex;flex-direction:column}
 .stats-grid .st-sales .vchart{flex:1;height:auto;min-height:240px}
 @media (max-width:860px){.stats-grid{grid-template-columns:1fr}.stats-grid .st-sales{grid-row:auto}}
+.record{display:flex;align-items:center;gap:14px;margin:0 0 14px;padding:12px 16px;border-radius:16px;border:1px solid rgba(231,163,62,.45);background:linear-gradient(90deg,rgba(231,163,62,.22),rgba(231,163,62,.08));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.record[hidden]{display:none}
+.rec-ico{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--gold);color:#163A43}.rec-ico svg{width:22px;height:22px}
+.rec-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.rec-txt small{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.rec-txt b{font-size:15px}.rec-txt span{font-size:12.5px;color:var(--muted)}
+.rec-btn{flex:none;white-space:nowrap}
+.rocket-cv{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:9999}
+@media (max-width:560px){.record{flex-wrap:wrap}.rec-btn{width:100%}}
 .st-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 24px;padding:14px 16px 0}
 @media (max-width:700px){.st-figs{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px}.st-figs .big{font-size:20px}}
 .st-figs .lbl{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
@@ -498,6 +507,7 @@ body{background:
         <div class="st-pop-act"><button class="btn small" id="st-cancel">Abbrechen</button><button class="btn small primary" id="st-apply">Anzeigen</button></div>
       </div>
     </div>
+    <div class="record" id="st-record" role="status" hidden></div>
     <div class="stats-grid">
       <div class="panel st-sales"><header><h2>Verkäufe <span class="st-period" id="st-period"></span></h2><span class="st-mode"><span class="seg" id="st-vat" role="group" aria-label="Netto oder Brutto"><button data-m="net" aria-pressed="true">Netto</button><button data-m="gross" aria-pressed="false">Brutto</button></span> nach Rechnungsdatum</span></header>
         <div class="st-figs"><div><div class="lbl" id="st-range-lbl">Letzte 12 Monate</div><div class="big num" id="st-sum">—</div><div class="yoy" id="st-sum-yoy"></div></div>
@@ -859,12 +869,70 @@ function statWindow(){
 const invInScope=i=>{const o=i.issuer||UNIT[i.unit_id]?.owner;if(!o)return ownerSel==='all';return allowedOwner(o)&&(ownerSel==='all'||ownerSel===o)};
 const invNet=i=>i.net!=null?+i.net:(i.total!=null&&i.vat!=null?+i.total-+i.vat:0);
 const niceMax=v=>{if(v<=0)return 1;const e=Math.pow(10,Math.floor(Math.log10(v)));const f=v/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e};
+/* ===== Rekord-Hinweis + Rakete ===== */
+const MONTHS_LONG=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const mLong=k=>MONTHS_LONG[+k.slice(5,7)-1]+' '+k.slice(0,4), mShort=k=>MONTHS[+k.slice(5,7)-1]+' '+k.slice(0,4);
+const eurBig=v=>Math.abs(v)>=1e6?(v/1e6).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Mio. €':eur(v);
+function renderRecord(){
+  const box=$('#st-record');if(!box)return;
+  const gross=statVat==='gross',vl=gross?'brutto':'netto';
+  const val=i=>gross?(i.total!=null?+i.total:invNet(i)):invNet(i);
+  const tot={};invoices.forEach(i=>{if(!i.invoice_date||!invInScope(i)||i.invoice_date>TODAY)return;const k=i.invoice_date.slice(0,7);tot[k]=(tot[k]||0)+val(i)});
+  const cur=TODAY.slice(0,7),last=addMonths(cur+'-01',-1).slice(0,7);
+  const best=pred=>{let k=null;for(const m in tot)if(pred(m)&&(k===null||tot[m]>tot[k]))k=m;return k};
+  let r=null;
+  const bAll=best(m=>m<cur);
+  if(bAll&&tot[cur]>tot[bAll])r={t:'Bester Monat der Firmengeschichte',s:eurBig(tot[cur])+' ('+vl+') im '+MONTHS_LONG[+cur.slice(5,7)-1]+' bis heute · bisher '+mShort(bAll)+' mit '+eurBig(tot[bAll])};
+  if(!r){const bL=best(m=>m<last);if(bL&&tot[last]>tot[bL])r={t:mLong(last)+' war der beste Monat der Firmengeschichte',s:eurBig(tot[last])+' ('+vl+') · bisher '+mShort(bL)+' mit '+eurBig(tot[bL])}}
+  if(!r){const bS=best(m=>m<cur&&m.slice(5)===cur.slice(5));if(bS&&tot[cur]>tot[bS])r={t:'Bester '+MONTHS_LONG[+cur.slice(5,7)-1]+' aller Zeiten',s:eurBig(tot[cur])+' ('+vl+') bis heute · bisher '+mShort(bS)+' mit '+eurBig(tot[bS])}}
+  if(!r){box.hidden=true;box.replaceChildren();return}
+  box.replaceChildren(
+    Object.assign(el('span',{class:'rec-ico','aria-hidden':'true'}),{innerHTML:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>'}),
+    el('div',{class:'rec-txt'},el('small',{text:'Rekord'}),el('b',{text:r.t}),el('span',{text:r.s})),
+    el('button',{class:'btn rec-btn',type:'button',onclick:e=>launchRocket(e.currentTarget)},'Rakete starten 🚀'));
+  box.hidden=false;
+}
+function launchRocket(from){
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.createElement('canvas'),dpr=Math.min(devicePixelRatio||1,2),W=innerWidth,H=innerHeight;
+  cv.className='rocket-cv';cv.width=W*dpr;cv.height=H*dpr;document.body.append(cv);
+  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+  const r=from?from.getBoundingClientRect():{left:W/2,top:H,width:0,height:0};
+  const sx=r.left+r.width/2,sy=H+30;
+  const tx=W*(.4+Math.random()*.25),ty=H*(.22+Math.random()*.1);
+  const COLS=['#E7A33E','#F5F1EA','#6FA0B0','#FF6B5A','#7DDC9A','#FFD86B'];
+  let parts=[],smoke=[],t0=performance.now(),boomAt=reduce?0:1500,boomed=false,flash=0;
+  const burst=(x,y,n,sp)=>{for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,v=sp*(.35+Math.random()*.65),c=COLS[i%COLS.length];
+    parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:1,dec:.006+Math.random()*.008,c,sz:2+Math.random()*2.6,tw:Math.random()<.3})}};
+  const ease=k=>1-Math.pow(1-k,3);
+  function frame(now){
+    const t=now-t0;ctx.clearRect(0,0,W,H);
+    if(!boomed&&t<boomAt){
+      const k=ease(t/boomAt),x=sx+(tx-sx)*k,y=sy+(ty-sy)*k,ang=Math.atan2(ty-sy,tx-sx)+Math.PI/2;
+      smoke.push({x,y,life:1,s:3+Math.random()*3,vx:(Math.random()-.5)*.6,vy:.6+Math.random()});
+      ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.scale(1.4,1.4);
+      ctx.fillStyle=Math.random()<.5?'#FFD86B':'#FF8A3D';ctx.beginPath();ctx.moveTo(-5,14);ctx.lineTo(0,26+Math.random()*12);ctx.lineTo(5,14);ctx.fill();
+      ctx.fillStyle='#F5F1EA';ctx.beginPath();ctx.moveTo(0,-18);ctx.quadraticCurveTo(8,-8,7,14);ctx.lineTo(-7,14);ctx.quadraticCurveTo(-8,-8,0,-18);ctx.fill();
+      ctx.fillStyle='#E7A33E';ctx.beginPath();ctx.moveTo(-7,6);ctx.lineTo(-13,16);ctx.lineTo(-7,14);ctx.fill();ctx.beginPath();ctx.moveTo(7,6);ctx.lineTo(13,16);ctx.lineTo(7,14);ctx.fill();
+      ctx.fillStyle='#163A43';ctx.beginPath();ctx.arc(0,-3,3.2,0,Math.PI*2);ctx.fill();
+      ctx.restore();
+    }else if(!boomed){boomed=true;flash=1;burst(tx,ty,240,11);setTimeout(()=>burst(tx-W*.18,ty+60+Math.random()*60,130,8),300);setTimeout(()=>burst(tx+W*.18,ty+40+Math.random()*60,130,8),600);setTimeout(()=>burst(tx,ty+30,160,9.5),900)}
+    smoke=smoke.filter(p=>(p.life-=.025)>0);smoke.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.s+=.25;ctx.fillStyle='rgba(245,241,234,'+(p.life*.25)+')';ctx.beginPath();ctx.arc(p.x,p.y,p.s,0,Math.PI*2);ctx.fill()});
+    if(flash>0){ctx.fillStyle='rgba(255,236,190,'+flash*.22+')';ctx.fillRect(0,0,W,H);flash-=.06}
+    parts=parts.filter(p=>(p.life-=p.dec)>0);
+    parts.forEach(p=>{p.vx*=.985;p.vy=p.vy*.985+.06;p.x+=p.vx;p.y+=p.vy;
+      ctx.globalAlpha=Math.max(0,p.life)*(p.tw?(.5+Math.random()*.5):1);ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(p.x,p.y,p.sz,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1});
+    if(!boomed||parts.length||smoke.length)requestAnimationFrame(frame);else cv.remove();
+  }
+  requestAnimationFrame(frame);setTimeout(()=>cv.remove(),9000);
+}
 const eurShort=v=>Math.abs(v)>=1000?(Math.round(v/100)/10).toLocaleString('de-DE')+' T€':Math.round(v).toLocaleString('de-DE')+' €';
 function showTip(e,html){const t=$('#chart-tip');t.replaceChildren(...html);t.hidden=false;
   const r=(e.currentTarget||e.target).getBoundingClientRect();const w=t.offsetWidth,h=t.offsetHeight;
   t.style.left=Math.max(8,Math.min(innerWidth-w-8,r.left+r.width/2-w/2))+'px';t.style.top=Math.max(8,r.top-h-8)+'px'}
 function hideTip(){$('#chart-tip').hidden=true}
 function renderStats(){
+  renderRecord();
   document.querySelectorAll('#st-range button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.r===statRange));
   const w=statWindow();
   document.querySelectorAll('#st-vat button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===statVat));
