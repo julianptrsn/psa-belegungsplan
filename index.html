@@ -141,6 +141,8 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .rec-txt small{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
 .rec-txt b{font-size:15px}.rec-txt span{font-size:12.5px;color:var(--muted)}
 .rec-btn{flex:none;white-space:nowrap}
+.upd{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,calc(env(safe-area-inset-bottom,0px) + 12px));z-index:40;display:flex;align-items:center;gap:14px;padding:10px 10px 10px 16px;border-radius:16px;border:1px solid rgba(231,163,62,.5);background:rgba(16,42,49,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 12px 32px rgba(0,0,0,.35);width:max-content;max-width:calc(100vw - 32px)}
+.upd[hidden]{display:none}.upd span{display:flex;flex-direction:column;gap:1px}.upd b{font-size:14px}.upd small{font-size:12px;color:var(--muted)}.upd .btn{flex:none;white-space:nowrap}
 .rocket-cv{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:9999}
 @media (max-width:560px){.record{flex-wrap:wrap}.rec-btn{width:100%}}
 .st-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 24px;padding:14px 16px 0}
@@ -603,6 +605,7 @@ body{background:
 
 <div id="drawer-root"></div>
 <div class="toast" id="toast" hidden></div>
+<div class="upd" id="upd" role="status" hidden><span><b>Neue Version verfügbar</b><small>Änderungen am Dashboard sind online.</small></span><button class="btn primary" id="upd-btn" type="button">Jetzt laden</button></div>
 <datalist id="companies"></datalist>
 
 <script>
@@ -3287,6 +3290,27 @@ function openPdfBlob(bytes){const url=URL.createObjectURL(new Blob([bytes],{type
 
 /* ===== App-Installation (Startbildschirm) ===== */
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
+/* ===== Update-Check: neue Version erkennen und per Knopf laden =====
+   APP_VERSION wird beim Veröffentlichen über GitHub automatisch eingesetzt (siehe .github/workflows/pages.yml).
+   Das Dashboard fragt version.json regelmäßig ab, am Browser-Zwischenspeicher vorbei. */
+const APP_VERSION='__BUILD__';
+(function(){
+  try{const u=new URL(location.href);if(u.searchParams.has('v')){u.searchParams.delete('v');history.replaceState(null,'',u.pathname+u.search+u.hash)}}catch(e){}
+  if(APP_VERSION.startsWith('__'))return; // lokal / ohne Build: kein Check
+  let latest=null,last=0;
+  async function check(){
+    if(Date.now()-last<20000)return;last=Date.now();
+    try{const r=await fetch('/version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;
+      const v=(await r.json()).v;if(v&&v!==APP_VERSION){latest=v;$('#upd').hidden=false}}catch(e){}
+  }
+  $('#upd-btn').addEventListener('click',()=>{$('#upd-btn').disabled=true;$('#upd-btn').textContent='Lädt …';
+    location.replace(location.pathname+'?v='+encodeURIComponent(latest||Date.now())+location.hash)});
+  setInterval(check,60000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')check()});
+  addEventListener('focus',check);
+  setTimeout(check,3000);
+})();
+
 
 
 /* ===== Login & Start ===== */
