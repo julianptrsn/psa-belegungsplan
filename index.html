@@ -481,7 +481,7 @@ body{background:
   <div class="side-lbl">Wohnungen</div>
   <select id="owner-sel" class="owner-sel" aria-label="Eigentümer"><option value="all">Alle Wohnungen</option><option>PSA Immobilien</option><option>Torben Schmidt</option></select>
   <div class="side-foot">
-    <span class="avatar" id="user-ini">·</span><div class="who"><b id="user-name"></b><small>angemeldet</small></div>
+    <span class="avatar" id="user-ini">·</span><div class="who"><b id="user-name"></b><small>angemeldet<span id="app-ver"></span></small></div>
     <button class="iconbtn" id="btn-logout" aria-label="Abmelden" title="Abmelden"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H4V3h5M16 17l5-5-5-5M21 12H9"/></svg></button>
   </div>
 </aside>
@@ -3297,6 +3297,7 @@ const APP_VERSION='__BUILD__';
 (function(){
   try{const u=new URL(location.href);if(u.searchParams.has('v')){u.searchParams.delete('v');history.replaceState(null,'',u.pathname+u.search+u.hash)}}catch(e){}
   if(APP_VERSION.startsWith('__'))return; // lokal / ohne Build: kein Check
+  $('#app-ver').textContent=' · Version '+APP_VERSION.split('-').pop();$('#app-ver').title='Build '+APP_VERSION;
   let latest=null,last=0;
   async function check(){
     if(Date.now()-last<20000)return;last=Date.now();
