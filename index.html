@@ -143,6 +143,45 @@ h2{font-size:15px;font-weight:700;font-stretch:108%;margin:0 0 10px;letter-spaci
 .rec-btn{flex:none;white-space:nowrap}
 .upd{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,calc(env(safe-area-inset-bottom,0px) + 12px));z-index:40;display:flex;align-items:center;gap:14px;padding:10px 10px 10px 16px;border-radius:16px;border:1px solid rgba(231,163,62,.5);background:rgba(16,42,49,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 12px 32px rgba(0,0,0,.35);width:max-content;max-width:calc(100vw - 32px)}
 .upd[hidden]{display:none}.upd span{display:flex;flex-direction:column;gap:1px}.upd b{font-size:14px}.upd small{font-size:12px;color:var(--muted)}.upd .btn{flex:none;white-space:nowrap}
+/* Rechnung schreiben: aufgeräumtes Formular */
+.drawer.wide.xwide{width:min(960px,100%)}
+.ivf{gap:14px;align-content:start}
+.ivcard{border:1px solid var(--glass-line,var(--line));border-radius:14px;padding:14px 16px 16px;background:rgba(255,255,255,.035);display:grid;gap:12px;min-width:0}
+.ivcard>h3{margin:0;font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--gold,var(--muted))}
+.ivf .two{align-items:start;gap:14px}
+.ivf .field input:not([type=checkbox]),.ivf .field select,.ivf .line input,.ivf .line select{height:42px;box-sizing:border-box;padding:0 12px;font-size:15px;line-height:40px;-webkit-appearance:none;appearance:none}
+.ivf .field select,.ivf .line select{padding-right:30px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23a9c1c6' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;background-size:11px}
+.ivf .field input[type=date]{display:flex;align-items:center}
+.ivf .field input[type=date]::-webkit-date-and-time-value{text-align:left}
+.ivf .field select:disabled{opacity:.7}
+.ivf .field textarea{padding:10px 12px;font-size:14px}
+.ivf .field>label,.ivf .lblrow{line-height:16px;height:16px}
+.lblrow{display:flex;align-items:center;line-height:1.2;justify-content:space-between;gap:8px}
+.linkbtn{background:none;border:0;padding:0;color:var(--gold,var(--accent));font-weight:600;font-size:13px;line-height:16px;cursor:pointer}
+.linkbtn:hover{text-decoration:underline}
+.qrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.qrow .qlbl{font-size:12px;color:var(--muted);margin-right:2px}
+.perrow{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
+.pill{display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;background:rgba(111,160,176,.16);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.pill.bad{background:rgba(255,107,90,.16);color:var(--bad)}
+.ext:empty{display:none}
+.ivf .lines{gap:8px}
+.ivf .lines-head,.ivf .line{grid-template-columns:152px minmax(150px,1fr) 66px 100px 78px 104px 36px;gap:8px;align-items:center}
+.ivf .lines-head .r{text-align:right}
+.ivf .line .amt{grid-column:auto;margin:0;font-size:14px;color:var(--fg);text-align:right;font-family:var(--font-num)}
+.ivf .line .l-del{height:36px;width:36px;padding:0;display:grid;place-items:center}
+.ivf .line input[type=number]{text-align:right;font-variant-numeric:tabular-nums}
+.ivf .lines>.quick{margin-top:4px}
+.ivbottom{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+.ivsum .sumbox{background:none;padding:0;font-size:14px;gap:6px}
+.ivsum .sumbox .tot{font-size:16px}
+.ivsum .meta{margin-top:2px}
+@media (max-width:760px){
+  .ivbottom{grid-template-columns:1fr}
+  .ivf .lines-head{display:none}
+  .ivf .line{grid-template-columns:1fr 1fr 1fr;grid-template-areas:"kind kind del" "txt txt txt" "qty pr vat" "amt amt amt";padding:10px;border:1px solid var(--glass-line,var(--line));border-radius:12px}
+  .ivf .l-kind{grid-area:kind}.ivf .l-txt{grid-area:txt}.ivf .l-qty{grid-area:qty}.ivf .l-pr{grid-area:pr}.ivf .l-vat{grid-area:vat}.ivf .l-del{grid-area:del;justify-self:end}.ivf .l-amt{grid-area:amt;justify-self:end;font-weight:600}
+}
+@media (max-width:520px){.ivf .two{grid-template-columns:1fr}}
 .rocket-cv{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:9999}
 @media (max-width:560px){.record{flex-wrap:wrap}.rec-btn{width:100%}}
 .st-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 24px;padding:14px 16px 0}
@@ -1682,6 +1721,24 @@ function invoiceSplit(p,cap){
   for(const n of invoiceNights(p)){const k=q/n;if(Math.abs(k-Math.round(k))<0.001&&k>=2&&(!cap||k<=cap))return{nights:n,persons:Math.round(k)}}
   return null;
 }
+// Genau ein ganzer Kalendermonat (01. bis Monatsletzter, letzter Tag ist eine Nacht)?
+const lastOfMonth=d=>addDays(addMonths(d.slice(0,7)+'-01',1),-1);
+const isFullMonth=(from,to)=>!!from&&!!to&&from.slice(8)==='01'&&from.slice(0,7)===to.slice(0,7)&&to===lastOfMonth(to);
+const hasCentsBeyond=v=>Math.abs(v*100-Math.round(v*100))>1e-6;
+// Monatspauschale einer Buchung (Wohnung gesamt, netto) – aus dem Preismodell oder aus einer früheren Monatsrechnung,
+// bei der der Preis pro Nacht nur eine umgerechnete Pauschale war (z. B. 3.150 € / 31 Nächte = 101,61 €).
+function monthlyFlat(b){
+  if(!b||b.price===''||b.price==null)return null;
+  const pers=+b.persons||0;
+  if(b.priceModel==='unit_month')return{amount:+b.price,src:''};
+  if(b.priceModel==='pp_month')return pers?{amount:r2(+b.price*pers),src:''}:null;
+  const night=perNight(b);if(!night)return null;
+  const c=cancelledNumbers();
+  const hit=invoices.filter(i=>i.booking_id===b.id&&!i.is_storno&&!isCancelled(c,i)&&isFullMonth(i.period_start,i.period_end)&&i.net!=null)
+    .sort((a,x)=>a.period_end<x.period_end?1:-1)
+    .find(i=>{const n=diff(i.period_start,i.period_end)+1;return Math.abs(+i.net-Math.round(+i.net))<0.005&&+i.net%10===0&&Math.abs(r2(+i.net/n)-night)<0.006&&Math.abs(night*n-(+i.net))>0.005});
+  return hit?{amount:+hit.net,src:hit.number}:null;
+}
 // Preis pro Nacht (gesamt) in das Preismodell der Buchung umrechnen
 function priceInModel(b,night,persons){const n=+persons||+b.persons||0;switch(b.priceModel){case'pp_night':return n?Math.round(night/n*100)/100:null;case'unit_night':return Math.round(night*100)/100;case'pp_month':return n?Math.round(night*30/n*100)/100:null;case'unit_month':return Math.round(night*30*100)/100;default:return null}}
 function invoiceNightly(p){
@@ -1693,6 +1750,9 @@ function invoiceNightly(p){
 }
 function priceFromInvoice(p,unitId){
   if(p.invPersons&&p.ppn!=null)return{priceModel:'pp_night',price:p.ppn,persons:p.invPersons};
+  // Monatsrechnung mit glattem Betrag, aber krummem Preis pro Nacht (3.150 € = 31 × 101,61 €): Monatspauschale
+  if(isFullMonth(p.periodStart,p.periodEnd)&&p.net!=null&&+p.net%10===0&&p.unitPrice!=null&&p.quantity>1&&Math.abs(r2(p.unitPrice)*p.quantity-p.net)>0.005)
+    return{priceModel:'unit_month',price:+p.net,persons:''};
   const sp=invoiceSplit(p,UNIT[unitId]?.cap||0);
   if(sp&&sp.persons===1)return{priceModel:'unit_night',price:p.unitPrice,persons:''};
   if(sp)return{priceModel:'pp_night',price:p.unitPrice,persons:sp.persons};
@@ -1971,6 +2031,15 @@ function drawInvoiceReview(file,p){
           if(np!=null)lines.push(priceCheck(b,np));
         }
         else lines.push(el('div',{class:'hint',text:'Preis passt: '+eur2(p.ppn)+' pro Person/Nacht.'}));
+      }
+      else if(monthlyFlat(b)&&isFullMonth(p.periodStart,p.periodEnd)&&p.net!=null){
+        const mf=monthlyFlat(b);
+        if(Math.abs(+p.net-mf.amount)<0.01)lines.push(el('div',{class:'hint',text:'Preis passt: Monatspauschale '+eur2(mf.amount)+'.'}));
+        else{
+          const np=b.priceModel==='unit_month'?+p.net:b.priceModel==='pp_month'&&+b.persons?r2(+p.net/(+b.persons)):null;st.newPrice=np;
+          lines.push(el('div',{class:'warnbox',text:'Preis weicht ab: Monatspauschale laut Buchung '+eur2(mf.amount)+', laut Rechnung '+eur2(+p.net)+'.'}));
+          if(np!=null)lines.push(priceCheck(b,np));
+        }
       }
       else{
         const invNight=invoiceNightly(p), bNight=perNight(b);
@@ -2478,7 +2547,7 @@ function bind(obj,key,id,type='text',extra={}){
   i.addEventListener('input',()=>{obj[key]=type==='number'?(i.value===''?'':+i.value):i.value;i.dispatchEvent(new Event('bound',{bubbles:true}))});return i}
 function selectEl(id,opts,val,on){const s=el('select',{id},opts.map(([v,t])=>el('option',{value:v,text:t})));s.value=val??'';s.disabled=!canWrite;s.addEventListener('change',()=>on(s.value));return s}
 function showDrawer(title,body,footer,wide){
-  $('#drawer-root').replaceChildren(el('div',{class:'scrim',onclick:closeDrawer}),el('div',{class:'drawer'+(wide?' wide':''),role:'dialog','aria-modal':'true','aria-labelledby':'d-title'},
+  $('#drawer-root').replaceChildren(el('div',{class:'scrim',onclick:closeDrawer}),el('div',{class:'drawer'+(wide==='x'?' wide xwide':wide?' wide':''),role:'dialog','aria-modal':'true','aria-labelledby':'d-title'},
     el('header',{},el('h2',{id:'d-title',text:title}),el('button',{class:'btn small',onclick:closeDrawer,'aria-label':'Schließen'},'✕')),body,footer));
 }
 
@@ -2632,6 +2701,17 @@ function defaultLines(b,from,to,dep){
   const nights=invNights(from,to,dep);
   if(!b||nights<1)return[{kind:'night',text:'Übernachtungen',qty:'',price:'',vat:7}];
   const p=+b.price||0,pers=+b.persons||0;
+  // Monatspauschale: ganzer Kalendermonat -> genau die Pauschale. Geht sie glatt auf (3.150 € / 30 = 105,00 €), wie gewohnt
+  // Nächte × Preis; sonst 1 × Monatspauschale statt eines krummen Preises pro Nacht.
+  const mf=monthlyFlat(b);
+  if(mf){
+    if(!dep&&isFullMonth(from,to)){
+      const pn=mf.amount/nights;
+      return hasCentsBeyond(pn)?[{kind:'night',text:'Übernachtungen (Monatspauschale)',qty:1,price:mf.amount,vat:7}]:[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(pn),vat:7}];
+    }
+    const pn=mf.amount/30;
+    return[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(pn),vat:7}];
+  }
   switch(b.priceModel){
     case'pp_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(p*pers),vat:7}];
     case'unit_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:p,vat:7}];
@@ -2681,7 +2761,7 @@ function drawInvoiceDrawer(){
   const custHint=el('div',{class:'hint'});
   const fromIn=el('input',{id:'iv-from',type:'date',value:d.from}),toIn=el('input',{id:'iv-to',type:'date',value:d.to});
   const perHint=el('div',{class:'hint'});
-  const extHint=el('div');
+  const extHint=el('div',{class:'ext'});
   const refill=el('button',{type:'button',class:'btn small',onclick:()=>{d.lines=defaultLines(bk,d.from,d.to,d.depart).concat(d.lines.filter(l=>l.kind!=='night'));drawLines();upd()}},'Nächte neu berechnen');
   const depCb=el('input',{type:'checkbox',id:'iv-dep'});depCb.checked=!!d.depart;
   const relines=()=>{d.lines=defaultLines(bk,d.from,d.to,d.depart).concat(d.lines.filter(l=>l.kind!=='night'));drawLines();upd()};
@@ -2698,7 +2778,7 @@ function drawInvoiceDrawer(){
     el('button',{type:'button',class:'btn small',onclick:()=>{if(!d.from)return;setTo(addDays(d.from,13))}},'2 Wochen')):null;
   const linesBox=el('div',{class:'lines'});
   function drawLines(){
-    linesBox.replaceChildren(el('div',{class:'lines-head'},el('span',{text:'Art'}),el('span',{text:'Beschreibung'}),el('span',{text:'Menge'}),el('span',{text:'Einzelpreis netto'}),el('span',{text:'USt.'}),el('span')),
+    linesBox.replaceChildren(el('div',{class:'lines-head'},el('span',{text:'Art'}),el('span',{text:'Beschreibung'}),el('span',{text:'Menge'}),el('span',{text:'Einzelpreis netto'}),el('span',{text:'USt.'}),el('span',{class:'r',text:'Betrag netto'}),el('span')),
       ...d.lines.map((l,ix)=>{
         const kind=selectEl('',Object.entries(LINE_KINDS).map(([k,v])=>[k,v.label]),l.kind,v=>{const was=LINE_KINDS[l.kind];l.kind=v;l.vat=LINE_KINDS[v].vat;if(!l.text||l.text===was?.text)l.text=LINE_KINDS[v].text;drawLines();upd()});
         const txt=el('input',{value:l.text||'',placeholder:'Beschreibung','aria-label':'Beschreibung'});txt.addEventListener('input',()=>{l.text=txt.value});
@@ -2706,7 +2786,8 @@ function drawInvoiceDrawer(){
         const pr=el('input',{type:'number',step:'0.01',inputmode:'decimal',value:l.price,placeholder:'Preis netto','aria-label':'Einzelpreis netto'});pr.addEventListener('input',()=>{l.price=pr.value;upd()});
         const vat=selectEl('',[['7','7 %'],['19','19 %'],['0','0 %']],String(l.vat),v=>{l.vat=+v;upd()});
         const del=el('button',{type:'button',class:'btn small',title:'Position entfernen','aria-label':'Position entfernen',onclick:()=>{d.lines.splice(ix,1);drawLines();upd()}},'✕');
-        return el('div',{class:'line'},kind,txt,qty,pr,vat,del,el('div',{class:'amt num','data-ix':ix}));
+        kind.classList.add('l-kind');txt.classList.add('l-txt');qty.classList.add('l-qty');pr.classList.add('l-pr');vat.classList.add('l-vat');del.classList.add('l-del');
+        return el('div',{class:'line'},kind,txt,qty,pr,vat,el('div',{class:'amt l-amt num','data-ix':ix}),del);
       }),
       el('div',{class:'quick'},
         el('button',{type:'button',class:'btn small',onclick:()=>{d.lines.push({kind:'cleaning',text:'Endreinigung',qty:1,price:'',vat:19});drawLines();upd()}},'+ Endreinigung'),
@@ -2731,7 +2812,7 @@ function drawInvoiceDrawer(){
     depLabel.textContent=d.to?'Gast reist am '+fmt(d.to)+' ab (der Abreisetag ist keine Nacht)':'Gast reist am Enddatum ab';
     const nN=invNights(d.from,d.to,d.depart);
     perHint.textContent=nN>0?nN+(nN===1?' Nacht':' Nächte')+(d.depart?' · Abreise am '+fmt(d.to):' · Folgerechnung ab '+fmt(addDays(d.to,1)))+(bk&&bk.invoicedUntil&&d.from<=bk.invoicedUntil?' · Achtung: bis '+fmt(bk.invoicedUntil)+' ist schon abgerechnet':''):'Zeitraum der Leistung';
-    perHint.className='hint'+(bk&&bk.invoicedUntil&&d.from&&d.from<=bk.invoicedUntil?' bad':'');
+    perHint.className='pill'+(bk&&bk.invoicedUntil&&d.from&&d.from<=bk.invoicedUntil?' bad':'');
     extHint.replaceChildren();
     if(bk&&nN>0){const lastNight=d.to,ld=lastDay(bk);
       if(ld&&lastNight>ld){
@@ -2742,7 +2823,7 @@ function drawInvoiceDrawer(){
     payHint.textContent=+d.payDays?'fällig am '+fmt(addDays(TODAY,+d.payDays)):'sofort fällig';
     const lod=lodgingApplies(d.to);lodgeBox.hidden=!lod;
     const r=calcInvoice(d.lines,{lodging:lod,exempt:d.exempt});
-    linesBox.querySelectorAll('.amt').forEach(a=>{const l=d.lines[+a.dataset.ix];a.textContent=l&&l.qty!==''&&l.price!==''?'= '+eur2(r2((+l.qty||0)*(+l.price||0)))+' netto':''});
+    linesBox.querySelectorAll('.amt').forEach(a=>{const l=d.lines[+a.dataset.ix];a.textContent=l&&l.qty!==''&&l.price!==''?eur2(r2((+l.qty||0)*(+l.price||0))):'—'});
     const rows=[];
     if(r.lodging)rows.push(el('div',{},el('span',{text:'Beherbergungsabgabe '+pctTxt(bset.lodging_tax_rate)+' auf '+eur2(r.base)}),el('b',{text:eur2(r.lodging)})));
     rows.push(el('div',{},el('span',{text:'Nettobetrag'}),el('b',{text:eur2(r.net)})));
@@ -2766,19 +2847,24 @@ function drawInvoiceDrawer(){
       el('span',{text:'Rechnung über '+eur2(inv.total)+' an '+inv.customer+' erstellen? Sie bekommt die Nummer '+previewNumber(iss())+' und kann danach nur noch storniert werden.'}),
       el('button',{class:'btn small primary',onclick:async e=>{e.target.disabled=true;await createInvoice(inv)}},'Ja, erstellen'),
       el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')))});
-  const body=el('div',{class:'body'},warn,
-    fld('iv-booking','Buchung',bookingSel,el('div',{class:'hint',text:'Aus der Buchung kommen Wohnung, Zeitraum und Preis. „Rechnung geschrieben bis“ wird danach automatisch gesetzt.'})),
-    el('div',{class:'two'},fld('iv-unit','Wohnung',unitSel,el('div',{class:'hint',text:'Absender: '+(owner()||'—')})),
-      el('div',{class:'field'},el('label',{for:'iv-cust',text:'Kunde'}),custSel,el('div',{class:'quick'},newCust),custHint)),
-    el('div',{class:'two'},fld('iv-from','Leistung von',fromIn),fld('iv-to','bis',toIn,perHint)),
-    el('label',{class:'check',for:'iv-dep'},depCb,depLabel),
-    presets,extHint,
-    el('div',{class:'sec',text:'Positionen'}),linesBox,
-    lodgeBox,
-    sum,
-    el('div',{class:'two'},fld('iv-pay','Zahlungsziel (Tage)',payIn,payHint),el('div')),
-    fld('iv-notes','Hinweis auf der Rechnung',notes),
-    nextNo,confirmBox);
+  const card=(title,...kids)=>el('section',{class:'ivcard'},el('h3',{text:title}),...kids);
+  const custLabel=el('div',{class:'lblrow'},el('label',{for:'iv-cust',text:'Kunde'}),newCust);
+  newCust.className='linkbtn';
+  const body=el('div',{class:'body ivf'},warn,
+    card('Buchung & Kunde',
+      fld('iv-booking','Buchung',bookingSel,el('div',{class:'hint',text:'Wohnung, Zeitraum und Preis kommen aus der Buchung. „Rechnung geschrieben bis“ wird danach automatisch gesetzt.'})),
+      el('div',{class:'two'},fld('iv-unit','Wohnung',unitSel,el('div',{class:'hint',text:'Absender: '+(owner()||'—')})),
+        el('div',{class:'field'},custLabel,custSel,custHint))),
+    card('Leistungszeitraum',
+      el('div',{class:'two'},fld('iv-from','Leistung von',fromIn),fld('iv-to','bis (einschließlich)',toIn)),
+      presets?el('div',{class:'qrow'},el('span',{class:'qlbl',text:'Schnellwahl'}),presets):null,
+      el('div',{class:'perrow'},perHint,el('label',{class:'check',for:'iv-dep'},depCb,depLabel)),
+      extHint),
+    card('Positionen',linesBox,lodgeBox),
+    el('div',{class:'ivbottom'},
+      card('Zahlung & Hinweis',fld('iv-pay','Zahlungsziel (Tage)',payIn,payHint),fld('iv-notes','Hinweis auf der Rechnung',notes)),
+      el('section',{class:'ivcard ivsum'},el('h3',{text:'Summe'}),sum,nextNo)),
+    confirmBox);
   const draftBtn=el('button',{class:'btn'},d.draftId?'Entwurf speichern':'Als Entwurf speichern');
   draftBtn.addEventListener('click',async()=>{draftBtn.disabled=true;const ok=await saveDraft();draftBtn.disabled=false;
     if(ok){toast('Entwurf gespeichert – noch ohne Rechnungsnummer');closeDrawer();view='rg';rgMode='inv';rgFilter='draft';render()}});
@@ -2786,7 +2872,7 @@ function drawInvoiceDrawer(){
     el('button',{class:'btn small danger',onclick:async e=>{e.target.disabled=true;if(await deleteDraft(d.draftId)){closeDrawer();toast('Entwurf gelöscht');render()}}},'Löschen'),
     el('button',{class:'btn small',onclick:()=>confirmBox.replaceChildren()},'Abbrechen')))},'Entwurf löschen'):null;
   const footer=el('footer',{},delDraft||el('button',{class:'btn',onclick:closeDrawer},'Abbrechen'),el('span',{class:'grow'}),prevBtn,draftBtn,createBtn);
-  showDrawer(d.draftId?'Entwurf bearbeiten':'Neue Rechnung',body,footer,true);
+  showDrawer(d.draftId?'Entwurf bearbeiten':'Neue Rechnung',body,footer,'x');
   upd();
 }
 function previewNumber(iss){if(!iss)return'';const y=+TODAY.slice(0,4);const n=iss.number_year===y?iss.next_no:1;return iss.number_prefix+y+'-'+String(n).padStart(iss.number_digits||3,'0')}
