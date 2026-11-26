@@ -2714,16 +2714,16 @@ function drawInvoiceDrawer(){
   const d=invDraft;editing={id:null,invoiceNew:true};
   const owner=()=>UNIT[d.unitId]?.owner;
   const iss=()=>issuers[owner()];
-  // Pro Wohnung nur die 3 neuesten Buchungen, ältere über „… ältere Buchungen anzeigen“ aufklappbar
+  // Pro Wohnung nur die neueste Buchung; per Pfeil lassen sich 3 weitere aufklappen, ältere werden nicht angezeigt
   const bookingSel=el('select',{id:'iv-booking'});
   const fillBookings=()=>{
     bookingSel.replaceChildren(el('option',{value:'',text:'Ohne Buchung'}),
       ...allowedBuildings().map(bld=>{const opts=bld.units.flatMap(([uid,label])=>{
         const list=SB().filter(x=>x.unitId===uid&&x.state!=='reserved').sort((a,c)=>a.start<c.start?1:-1);
-        const open=invBkOpen.has(uid), shown=open?list:list.filter((x,ix)=>ix<3||x.id===d.bookingId), more=list.length-shown.length;
+        const open=invBkOpen.has(uid), lim=open?4:1, shown=list.filter((x,ix)=>ix<lim||x.id===d.bookingId), more=Math.min(3,list.length-1)-(open?3:0);
         const o=shown.map(x=>el('option',{value:x.id,text:(label==='Wohnung'?'':label+' · ')+(x.company||'Ohne Firma')+' · '+fmt(x.start)+' – '+endTxt(x)+(billing(x).days?' · '+billing(x).days+' N. offen':'')}));
-        if(more>0)o.push(el('option',{value:'__more:'+uid,text:'      … '+more+' ältere '+(more===1?'Buchung':'Buchungen')+(label==='Wohnung'?'':' ('+label+')')+' anzeigen'}));
-        else if(open&&list.length>3)o.push(el('option',{value:'__less:'+uid,text:'      … ältere '+(label==='Wohnung'?'':'('+label+') ')+'wieder einklappen'}));
+        if(!open&&list.length>1){const k=Math.min(3,list.length-1);o.push(el('option',{value:'__more:'+uid,text:'      ▸ '+k+' weitere '+(k===1?'Buchung':'Buchungen')+(label==='Wohnung'?'':' ('+label+')')}))}
+        else if(open)o.push(el('option',{value:'__less:'+uid,text:'      ▴ einklappen'+(label==='Wohnung'?'':' ('+label+')')}));
         return o});
       return opts.length?el('optgroup',{label:bld.name},...opts):null}).filter(Boolean));
     bookingSel.value=d.bookingId;
