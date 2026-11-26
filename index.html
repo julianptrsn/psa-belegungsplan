@@ -2801,7 +2801,6 @@ function drawInvoiceDrawer(){
     sum.replaceChildren(...rows);
     const w=[];
     if(!iss()||!iss().name||!iss().iban)w.push('Für '+owner()+' fehlen noch Absenderdaten (Einstellungen).');
-    if(lod&&!d.exempt&&r.lodging)w.push('Der USt-Satz auf die Beherbergungsabgabe ('+pctTxt(bset.lodging_tax_vat)+') ist noch mit dem Steuerberater zu klären – änderbar in den Einstellungen.');
     warn.replaceChildren(...w.map(t=>el('div',{class:'warnbox',text:t,style:'margin-bottom:6px'})));
     nextNo.textContent=iss()?'Nächste Nummer: '+previewNumber(iss()):'';
   }
@@ -3239,7 +3238,7 @@ function openBillingSettings(){
     el('div',{class:'sec',text:'Beherbergungsabgabe Flensburg'}),
     el('div',{class:'three'},fld('bs-rate','Satz in %',bind(s,'lodging_tax_rate','bs-rate','number',{step:'0.01'})),fld('bs-vat','USt. auf die Abgabe',selectEl('bs-vat',[['7','7 %'],['19','19 %'],['0','0 %']],String(+s.lodging_tax_vat),v=>s.lodging_tax_vat=+v)),
       fld('bs-since','gilt für Leistungen ab',bind(s,'lodging_tax_since','bs-since','date'))),
-    el('div',{class:'hint',text:'Berechnet auf das Brutto-Entgelt aus Übernachtungen und Endreinigung (Satzung § 3). Reparaturen und sonstige Positionen zählen nicht. Der USt-Satz auf die weitergegebene Abgabe ist mit dem Steuerberater zu klären.'}),
+    el('div',{class:'hint',text:'Berechnet auf das Brutto-Entgelt aus Übernachtungen und Endreinigung (Satzung § 3). Reparaturen und sonstige Positionen zählen nicht. Auf die weitergegebene Abgabe fallen 7 % USt. an (mit dem Steuerberater geklärt).'}),
     el('div',{class:'sec',text:'Zahlung & Mahnwesen'}),
     fld('bs-days','Standard-Zahlungsziel für neue Kunden (Tage)',bind(s,'default_payment_days','bs-days','number',{min:'0',step:'1'})),
     fld('bs-std','Standardtext auf jeder Rechnung (z. B. Check-in/Check-out)',(()=>{const t=el('textarea',{id:'bs-std'});t.value=s.standard_note||'';t.addEventListener('input',()=>s.standard_note=t.value);return t})(),el('div',{class:'hint',text:'Wird bei jeder neuen Rechnung ins Hinweisfeld übernommen und lässt sich dort pro Rechnung ändern.'})),
