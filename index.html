@@ -1721,24 +1721,6 @@ function invoiceSplit(p,cap){
   for(const n of invoiceNights(p)){const k=q/n;if(Math.abs(k-Math.round(k))<0.001&&k>=2&&(!cap||k<=cap))return{nights:n,persons:Math.round(k)}}
   return null;
 }
-// Genau ein ganzer Kalendermonat (01. bis Monatsletzter, letzter Tag ist eine Nacht)?
-const lastOfMonth=d=>addDays(addMonths(d.slice(0,7)+'-01',1),-1);
-const isFullMonth=(from,to)=>!!from&&!!to&&from.slice(8)==='01'&&from.slice(0,7)===to.slice(0,7)&&to===lastOfMonth(to);
-const hasCentsBeyond=v=>Math.abs(v*100-Math.round(v*100))>1e-6;
-// Monatspauschale einer Buchung (Wohnung gesamt, netto) – aus dem Preismodell oder aus einer früheren Monatsrechnung,
-// bei der der Preis pro Nacht nur eine umgerechnete Pauschale war (z. B. 3.150 € / 31 Nächte = 101,61 €).
-function monthlyFlat(b){
-  if(!b||b.price===''||b.price==null)return null;
-  const pers=+b.persons||0;
-  if(b.priceModel==='unit_month')return{amount:+b.price,src:''};
-  if(b.priceModel==='pp_month')return pers?{amount:r2(+b.price*pers),src:''}:null;
-  const night=perNight(b);if(!night)return null;
-  const c=cancelledNumbers();
-  const hit=invoices.filter(i=>i.booking_id===b.id&&!i.is_storno&&!isCancelled(c,i)&&isFullMonth(i.period_start,i.period_end)&&i.net!=null)
-    .sort((a,x)=>a.period_end<x.period_end?1:-1)
-    .find(i=>{const n=diff(i.period_start,i.period_end)+1;return Math.abs(+i.net-Math.round(+i.net))<0.005&&+i.net%10===0&&Math.abs(r2(+i.net/n)-night)<0.006&&Math.abs(night*n-(+i.net))>0.005});
-  return hit?{amount:+hit.net,src:hit.number}:null;
-}
 // Preis pro Nacht (gesamt) in das Preismodell der Buchung umrechnen
 function priceInModel(b,night,persons){const n=+persons||+b.persons||0;switch(b.priceModel){case'pp_night':return n?Math.round(night/n*100)/100:null;case'unit_night':return Math.round(night*100)/100;case'pp_month':return n?Math.round(night*30/n*100)/100:null;case'unit_month':return Math.round(night*30*100)/100;default:return null}}
 function invoiceNightly(p){
@@ -1750,9 +1732,6 @@ function invoiceNightly(p){
 }
 function priceFromInvoice(p,unitId){
   if(p.invPersons&&p.ppn!=null)return{priceModel:'pp_night',price:p.ppn,persons:p.invPersons};
-  // Monatsrechnung mit glattem Betrag, aber krummem Preis pro Nacht (3.150 € = 31 × 101,61 €): Monatspauschale
-  if(isFullMonth(p.periodStart,p.periodEnd)&&p.net!=null&&+p.net%10===0&&p.unitPrice!=null&&p.quantity>1&&Math.abs(r2(p.unitPrice)*p.quantity-p.net)>0.005)
-    return{priceModel:'unit_month',price:+p.net,persons:''};
   const sp=invoiceSplit(p,UNIT[unitId]?.cap||0);
   if(sp&&sp.persons===1)return{priceModel:'unit_night',price:p.unitPrice,persons:''};
   if(sp)return{priceModel:'pp_night',price:p.unitPrice,persons:sp.persons};
@@ -2031,15 +2010,6 @@ function drawInvoiceReview(file,p){
           if(np!=null)lines.push(priceCheck(b,np));
         }
         else lines.push(el('div',{class:'hint',text:'Preis passt: '+eur2(p.ppn)+' pro Person/Nacht.'}));
-      }
-      else if(monthlyFlat(b)&&isFullMonth(p.periodStart,p.periodEnd)&&p.net!=null){
-        const mf=monthlyFlat(b);
-        if(Math.abs(+p.net-mf.amount)<0.01)lines.push(el('div',{class:'hint',text:'Preis passt: Monatspauschale '+eur2(mf.amount)+'.'}));
-        else{
-          const np=b.priceModel==='unit_month'?+p.net:b.priceModel==='pp_month'&&+b.persons?r2(+p.net/(+b.persons)):null;st.newPrice=np;
-          lines.push(el('div',{class:'warnbox',text:'Preis weicht ab: Monatspauschale laut Buchung '+eur2(mf.amount)+', laut Rechnung '+eur2(+p.net)+'.'}));
-          if(np!=null)lines.push(priceCheck(b,np));
-        }
       }
       else{
         const invNight=invoiceNightly(p), bNight=perNight(b);
@@ -2701,22 +2671,21 @@ function defaultLines(b,from,to,dep){
   const nights=invNights(from,to,dep);
   if(!b||nights<1)return[{kind:'night',text:'Übernachtungen',qty:'',price:'',vat:7}];
   const p=+b.price||0,pers=+b.persons||0;
-  // Monatspauschale: ganzer Kalendermonat -> genau die Pauschale. Geht sie glatt auf (3.150 € / 30 = 105,00 €), wie gewohnt
-  // Nächte × Preis; sonst 1 × Monatspauschale statt eines krummen Preises pro Nacht.
-  const mf=monthlyFlat(b);
-  if(mf){
-    if(!dep&&isFullMonth(from,to)){
-      const pn=mf.amount/nights;
-      return hasCentsBeyond(pn)?[{kind:'night',text:'Übernachtungen (Monatspauschale)',qty:1,price:mf.amount,vat:7}]:[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(pn),vat:7}];
-    }
-    const pn=mf.amount/30;
-    return[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(pn),vat:7}];
-  }
   switch(b.priceModel){
     case'pp_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(p*pers),vat:7}];
     case'unit_night':return[{kind:'night',text:'Übernachtungen',qty:nights,price:p,vat:7}];
     default:return[{kind:'night',text:'Übernachtungen',qty:nights,price:r2(perNight(b)),vat:7}];
   }
+}
+// Woher der Preis pro Nacht im Rechnungsvorschlag kommt
+function priceSrc(b){
+  const p=+b.price||0,n=+b.persons||0;
+  let t;
+  if(b.price===''||b.price==null)t='In der Buchung ist kein Preis hinterlegt – bitte Einzelpreis eintragen.';
+  else if(b.priceModel==='pp_night')t='Preis aus der Buchung: '+eur2(p)+' pro Person/Nacht × '+n+' '+(n===1?'Person':'Personen')+' = '+eur2(r2(p*n))+' pro Nacht.';
+  else t='Preis aus der Buchung: '+eur2(perNight(b))+' pro Nacht ('+eur2(p)+' '+PRICE_SHORT[b.priceModel]+'). Stimmt das nicht, bitte den Preis in der Buchung korrigieren (z. B. auf „pro Person/Nacht“).';
+  const odd=b.priceModel!=='pp_night'&&Math.abs(perNight(b)*2-Math.round(perNight(b)*2))>0.001;
+  return el('div',{class:odd?'warnbox':'hint',text:t});
 }
 function matchCustomer(company){return customers.find(c=>sameCo(custName(c),company))||null}
 function customerSnapshot(c){return c?{id:c.id,customer_no:c.customer_no,kind:c.kind,name:custName(c),company_name:c.company_name,first_name:c.first_name,last_name:c.last_name,
@@ -2860,7 +2829,7 @@ function drawInvoiceDrawer(){
       presets?el('div',{class:'qrow'},el('span',{class:'qlbl',text:'Schnellwahl'}),presets):null,
       el('div',{class:'perrow'},perHint,el('label',{class:'check',for:'iv-dep'},depCb,depLabel)),
       extHint),
-    card('Positionen',linesBox,lodgeBox),
+    card('Positionen',bk?priceSrc(bk):null,linesBox,lodgeBox),
     el('div',{class:'ivbottom'},
       card('Zahlung & Hinweis',fld('iv-pay','Zahlungsziel (Tage)',payIn,payHint),fld('iv-notes','Hinweis auf der Rechnung',notes)),
       el('section',{class:'ivcard ivsum'},el('h3',{text:'Summe'}),sum,nextNo)),
