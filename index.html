@@ -1682,6 +1682,8 @@ function invoiceSplit(p,cap){
   for(const n of invoiceNights(p)){const k=q/n;if(Math.abs(k-Math.round(k))<0.001&&k>=2&&(!cap||k<=cap))return{nights:n,persons:Math.round(k)}}
   return null;
 }
+// Preis pro Nacht (gesamt) in das Preismodell der Buchung umrechnen
+function priceInModel(b,night,persons){const n=+persons||+b.persons||0;switch(b.priceModel){case'pp_night':return n?Math.round(night/n*100)/100:null;case'unit_night':return Math.round(night*100)/100;case'pp_month':return n?Math.round(night*30/n*100)/100:null;case'unit_month':return Math.round(night*30*100)/100;default:return null}}
 function invoiceNightly(p){
   const net=p.net!=null?p.net:(p.quantity!=null&&p.unitPrice!=null?p.quantity*p.unitPrice:null);
   if(net==null)return null;
@@ -1944,6 +1946,9 @@ function drawInvoiceReview(file,p){
       const b=bookings.find(x=>x.id===st.target);if(!b)return;
       const newInv=b.invoicedUntil&&b.invoicedUntil>p.periodEnd?b.invoicedUntil:p.periodEnd;
       if(b.departureConfirmed&&p.periodEnd>b.departureConfirmed)detail.append(el('div',{class:'hint',text:'Hinweis: Auszug ist am '+fmt(b.departureConfirmed)+', die Rechnung geht bis '+fmt(p.periodEnd)+'. Der bezahlte Zeitraum bleibt im Plan belegt.'}));
+      st.newPrice=null;st.inferPersons=0;
+      const priceCheck=(b,np)=>{const cb=el('input',{type:'checkbox',id:'iv-price-upd'});cb.checked=st.setPrice!==false;st.setPrice=cb.checked;cb.addEventListener('change',()=>st.setPrice=cb.checked);
+        return el('label',{class:'check',for:'iv-price-upd'},cb,el('span',{text:'Preis in der Buchung auf '+eur2(np)+' '+PRICE_SHORT[b.priceModel]+' ändern (bisher '+eur2(+b.price)+'), damit weitere Nächte mit dem neuen Preis gerechnet werden'}))};
       const lines=[el('div',{class:'hint',text:'„Abgerechnet bis“: '+fmt(b.invoicedUntil)+' → '+fmt(newInv)})];
       const newEnd=newInv;
       if(endOf(b)===FAR||p.periodEnd>=endOf(b)){
@@ -1960,7 +1965,11 @@ function drawInvoiceReview(file,p){
       if(b.price===''||b.price==null)lines.push(el('div',{class:'hint',text:'Preis wird aus der Rechnung übernommen: '+eur2(st.price)+' '+PRICE_SHORT[st.priceModel]}));
       else if(p.invPersons&&p.ppn!=null){
         const bp=perPersonNight(b);
-        if(Math.abs(bp-p.ppn)>0.01)lines.push(el('div',{class:'warnbox',text:'Achtung: Laut Buchung '+eur2(bp)+' pro Person/Nacht, laut Rechnung '+eur2(p.ppn)+'. Der Preis in der Buchung bleibt unverändert.'}));
+        if(Math.abs(bp-p.ppn)>0.01){
+          const np=priceInModel(b,p.ppn*p.invPersons,p.invPersons);st.newPrice=np;
+          lines.push(el('div',{class:'warnbox',text:'Preis weicht ab: Laut Buchung '+eur2(bp)+' pro Person/Nacht, laut Rechnung '+eur2(p.ppn)+'.'}));
+          if(np!=null)lines.push(priceCheck(b,np));
+        }
         else lines.push(el('div',{class:'hint',text:'Preis passt: '+eur2(p.ppn)+' pro Person/Nacht.'}));
       }
       else{
@@ -1975,7 +1984,11 @@ function drawInvoiceReview(file,p){
           lines.push(el('div',{class:'hint',text:'Rechnung passt zu '+kr+' '+(kr===1?'Person':'Personen')+' à '+eur2(bpp)+' pro Nacht ('+eur2(invNight)+' pro Nacht). In der Buchung stehen bisher '+b.persons+' Pers.'}));
           lines.push(el('label',{class:'check',for:'iv-pers-inf'},cbp,el('span',{text:'Personen in der Buchung von '+b.persons+' auf '+kr+' ändern (Preis pro Person bleibt '+eur2(bpp)+')'})));
         }
-        else if(invNight!=null&&Math.abs(invNight-bNight)>0.01)lines.push(el('div',{class:'warnbox',text:'Achtung: Laut Buchung '+eur2(bNight)+' pro Nacht'+pp(bNight)+', laut Rechnung '+eur2(invNight)+' pro Nacht'+pp(invNight)+'. Der Preis in der Buchung bleibt unverändert.'}));
+        else if(invNight!=null&&Math.abs(invNight-bNight)>0.01){
+          const np=priceInModel(b,invNight);st.newPrice=np;
+          lines.push(el('div',{class:'warnbox',text:'Preis weicht ab: Laut Buchung '+eur2(bNight)+' pro Nacht'+pp(bNight)+', laut Rechnung '+eur2(invNight)+' pro Nacht'+pp(invNight)+'.'}));
+          if(np!=null)lines.push(priceCheck(b,np));
+        }
         else if(invNight!=null)lines.push(el('div',{class:'hint',text:'Preis passt: '+eur2(invNight)+' pro Nacht'+pp(invNight)+'.'}));
       }
       detail.append(...lines);
@@ -2177,6 +2190,7 @@ async function saveInvoice(file,p,st){
     if(b.price===''||b.price==null){upd.price=st.price===''?null:+st.price;upd.price_model=st.priceModel}
     if(p.invPersons&&st.setPersons&&p.invPersons!==+b.persons)upd.persons=p.invPersons;
     else if(!p.invPersons&&st.inferPersons&&st.setPersons&&st.inferPersons!==+b.persons)upd.persons=st.inferPersons;
+    if(st.newPrice!=null&&st.setPrice!==false&&b.price!==''&&b.price!=null&&Math.abs(st.newPrice-(+b.price))>0.005)upd.price=st.newPrice;
     const {error}=await sb.from('bookings').update(upd).eq('id',bookingId);
     if(error)throw new Error('Buchung konnte nicht aktualisiert werden: '+error.message);
   }
