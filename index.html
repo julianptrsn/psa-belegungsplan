@@ -1486,8 +1486,11 @@ function invoiceLines(items){
 }
 const deNum=s=>{if(s==null)return null;const m=String(s).replace(/[€\s]/g,'').match(/-?[\d.]*\d(?:,\d+)?/);if(!m)return null;return parseFloat(m[0].replace(/\./g,'').replace(',','.'))};
 let dateFixes=[];
-const deDate=s=>{const m=String(s||'').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(!m)return'';
+const deDate=s=>{const m=String(s||'').match(/(\d{1,2})\.(\d{1,2})\.(\d{4,5})(?!\d)/);if(!m)return'';
   let d=+m[1],mo=+m[2],y=+m[3];if(mo<1||mo>12||d<1)return'';
+  // Tippfehler mit fünfstelliger Jahreszahl (z. B. 30.11.22026): eine Ziffer zu viel -> passendes Jahr 20xx
+  if(m[3].length===5){const c=[...m[3]].map((_,i)=>m[3].slice(0,i)+m[3].slice(i+1)).find(v=>/^20\d\d$/.test(v));if(!c)return'';y=+c;
+    dateFixes.push({raw:m[0],fixed:pad(d)+'.'+pad(mo)+'.'+y,typo:true})}
   const last=new Date(Date.UTC(y,mo,0)).getUTCDate();
   if(d>last){dateFixes.push({raw:m[0],fixed:pad(last)+'.'+pad(mo)+'.'+y});d=last}
   return y+'-'+pad(mo)+'-'+pad(d)};
@@ -1547,7 +1550,7 @@ function parseInvoiceRaw(items,width){
   }
   for(const r of (letterAt>=0?hdr.slice(0,letterAt):hdr)){
     const t=r.text.trim();if(!t)continue;
-    const m=t.match(/(\d{1,2}\.\d{1,2}\.\d{4})\s*[-–]\s*(\d{1,2}\.\d{1,2}\.\d{4})/);
+    const m=t.match(/(\d{1,2}\.\d{1,2}\.\d{4,5})\s*[-–]\s*(\d{1,2}\.\d{1,2}\.\d{4,5})/);
     if(m){
       const rest=t.replace(m[0],'');
       const pm=rest.match(/(\d+)\s*Person/i), pr=rest.match(/(\d+(?:[.,]\d+)?)\s*€\s*\/\s*Nacht/i);
@@ -2051,7 +2054,7 @@ function drawInvoiceReview(file,p){
   const body=el('div',{class:'body'},summary,
     dup?el('div',{class:'warnbox',text:'Rechnung '+p.number+' ist schon erfasst'+(dup.booking_id&&bookings.find(b=>b.id===dup.booking_id)?' (bei '+(bookings.find(b=>b.id===dup.booking_id).company)+', '+fmt(bookings.find(b=>b.id===dup.booking_id).start)+')':' (ohne Buchung)')+'. Mit „Neu zuordnen“ hängst du sie an die unten gewählte Buchung.'}):null,
     (p.issuer&&st.unitId&&!sameOwner(p.issuer,UNIT[st.unitId].owner))?el('div',{class:'warnbox',text:'Rechnungssteller „'+p.issuer+'“, die Wohnung gehört aber zu '+UNIT[st.unitId].owner+'. Bitte Wohnung prüfen.'}):null,
-    (p.fixes&&p.fixes.length)?el('div',{class:'warnbox',text:p.fixes.map(x=>'Auf der Rechnung steht '+x.raw+', das Datum gibt es nicht. Übernommen wird '+x.fixed+'.').join(' ')+' Bitte prüfen und bei Bedarf unten anpassen.'}):null,
+    (p.fixes&&p.fixes.length)?el('div',{class:'warnbox',text:p.fixes.map(x=>'Auf der Rechnung steht '+x.raw+(x.typo?', die Jahreszahl hat eine Ziffer zu viel':', das Datum gibt es nicht')+'. Übernommen wird '+x.fixed+'.').join(' ')+' Bitte prüfen und bei Bedarf unten anpassen.'}):null,
     el('div',{class:'two'},f('iv-ps','Leistung von',psInp),f('iv-pe','Leistung bis (einschl.)',peInp)),
     periodHint,
     f('iv-date','Rechnungsdatum',dateInp),
